@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+#Saved Data JSON
+kanban_data.json
+
 # C extensions
 *.so
 
