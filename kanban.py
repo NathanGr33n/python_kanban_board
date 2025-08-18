@@ -96,13 +96,65 @@ def validate_menu_choice(choice: str) -> Tuple[bool, str]:
         return False, "Please enter a choice"
     
     choice = choice.strip()
-    if choice not in ['1', '2', '3', '4', '5']:
-        return False, "Please enter a number between 1 and 5"
+    if choice not in ['1', '2', '3', '4', '5', '6', '7', '8']:
+        return False, "Please enter a number between 1 and 8"
+    
+    return True, ""
+
+def validate_priority(priority: str) -> Tuple[bool, str]:
+    """Validate task priority input.
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not priority or not priority.strip():
+        return False, "Priority cannot be empty"
+    
+    priority = priority.strip().lower()
+    if priority not in ['high', 'medium', 'low']:
+        return False, "Priority must be 'high', 'medium', or 'low'"
+    
+    return True, ""
+
+def validate_due_date(due_date_str: str) -> Tuple[bool, str]:
+    """Validate due date input.
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not due_date_str or not due_date_str.strip():
+        return True, ""  # Due date is optional
+    
+    try:
+        # Try to parse as ISO date format
+        datetime.fromisoformat(due_date_str.strip())
+        return True, ""
+    except ValueError:
+        return False, "Due date must be in format YYYY-MM-DD or YYYY-MM-DD HH:MM:SS"
+
+def validate_tags(tags_str: str) -> Tuple[bool, str]:
+    """Validate tags input (comma-separated).
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not tags_str or not tags_str.strip():
+        return True, ""  # Tags are optional
+    
+    tags = [tag.strip() for tag in tags_str.split(',')]
+    for tag in tags:
+        if not tag:
+            return False, "Tags cannot be empty (remove extra commas)"
+        if len(tag) > 20:
+            return False, "Each tag must be 20 characters or less"
+        if not tag.replace('_', '').replace('-', '').isalnum():
+            return False, "Tags can only contain letters, numbers, hyphens, and underscores"
     
     return True, ""
 
 def validate_json_structure(data: Any) -> Tuple[bool, str]:
     """Validate that loaded JSON has the correct kanban board structure.
+    Supports both old (id, title) and new (enhanced) task formats.
     
     Returns:
         Tuple of (is_valid, error_message)
@@ -123,11 +175,31 @@ def validate_json_structure(data: Any) -> Tuple[bool, str]:
             if not isinstance(task, dict):
                 return False, f"Task {i+1} in '{column}' must be a dictionary"
             
+            # Required fields for all task formats
             if "id" not in task or "title" not in task:
                 return False, f"Task {i+1} in '{column}' missing required fields (id, title)"
             
             if not isinstance(task["id"], str) or not isinstance(task["title"], str):
                 return False, f"Task {i+1} in '{column}' has invalid field types"
+            
+            # Optional fields validation (for enhanced format)
+            if "priority" in task and not isinstance(task["priority"], str):
+                return False, f"Task {i+1} in '{column}' priority must be a string"
+            
+            if "priority" in task and task["priority"] not in ['high', 'medium', 'low']:
+                return False, f"Task {i+1} in '{column}' has invalid priority"
+            
+            if "description" in task and not isinstance(task["description"], str):
+                return False, f"Task {i+1} in '{column}' description must be a string"
+            
+            if "created_at" in task and not isinstance(task["created_at"], str):
+                return False, f"Task {i+1} in '{column}' created_at must be a string"
+            
+            if "due_date" in task and task["due_date"] is not None and not isinstance(task["due_date"], str):
+                return False, f"Task {i+1} in '{column}' due_date must be a string or null"
+            
+            if "tags" in task and not isinstance(task["tags"], list):
+                return False, f"Task {i+1} in '{column}' tags must be a list"
     
     return True, ""
 
@@ -170,6 +242,104 @@ def find_matching_tasks(task_id_fragment: str) -> List[Tuple[str, Dict[str, str]
                 matches.append((col_name, task))
     
     return matches
+
+def get_priority_symbol(priority: str) -> str:
+    """Get emoji symbol for priority level."""
+    priority_map = {
+        'high': '🔴',
+        'medium': '🟡', 
+        'low': '🟢'
+    }
+    return priority_map.get(priority.lower(), '⚪')
+
+def get_priority_color(priority: str) -> str:
+    """Get Rich color for priority level."""
+    priority_colors = {
+        'high': 'red',
+        'medium': 'yellow',
+        'low': 'green'
+    }
+    return priority_colors.get(priority.lower(), 'white')
+
+def format_due_date(due_date_str: Optional[str]) -> str:
+    """Format due date with urgency indicators."""
+    if not due_date_str:
+        return ""
+    
+    try:
+        due_date = datetime.fromisoformat(due_date_str)
+        now = datetime.now()
+        days_diff = (due_date - now).days
+        
+        if days_diff < 0:
+            return f"⏰ [red]Overdue ({abs(days_diff)}d)[/]"
+        elif days_diff == 0:
+            return f"⏳ [yellow]Due today[/]"
+        elif days_diff <= 3:
+            return f"⏳ [yellow]Due in {days_diff}d[/]"
+        else:
+            return f"📅 [dim]Due {due_date.strftime('%m/%d')}[/]"
+    except ValueError:
+        return f"⚠️ [dim]Invalid date[/]"
+
+def migrate_old_tasks() -> int:
+    """Migrate tasks from old format to new enhanced format.
+    
+    Returns:
+        int: Number of tasks migrated
+    """
+    migrated_count = 0
+    now_iso = datetime.now().isoformat()
+    
+    for column_name, tasks in board.items():
+        for task in tasks:
+            # Check if task needs migration (missing enhanced fields)
+            needs_migration = False
+            
+            if "priority" not in task:
+                task["priority"] = "medium"
+                needs_migration = True
+            
+            if "description" not in task:
+                task["description"] = ""
+                needs_migration = True
+            
+            if "created_at" not in task:
+                task["created_at"] = now_iso
+                needs_migration = True
+            
+            if "due_date" not in task:
+                task["due_date"] = None
+                needs_migration = True
+            
+            if "tags" not in task:
+                task["tags"] = []
+                needs_migration = True
+            
+            if needs_migration:
+                migrated_count += 1
+    
+    return migrated_count
+
+def create_enhanced_task(title: str, description: str = "", priority: str = "medium", 
+                        due_date: Optional[str] = None, tags: List[str] = None) -> Dict[str, Any]:
+    """Create a new task with enhanced fields.
+    
+    Returns:
+        Dict containing the new task
+    """
+    if tags is None:
+        tags = []
+    
+    return {
+        "id": find_unique_task_id(),
+        "title": title.strip(),
+        "description": description.strip(),
+        "priority": priority.lower(),
+        "created_at": datetime.now().isoformat(),
+        "due_date": due_date,
+        "tags": tags
+    }
 
 #endregion
 
@@ -330,30 +500,94 @@ def save_board() -> bool:
 
 #region Display
 def display_board():
-    """Display the Kanban board in the terminal."""
+    """Display the Kanban board in the terminal with enhanced task information."""
     console.clear()
     console.rule("[bold red]📋 KANBAN BOARD[/]")
-    print("\n📋 KANBAN BOARD\n" + "-" * 80)
-    max_tasks = max(len(board[col]) for col in board)
+    
+    # Auto-migrate any old tasks
+    migrated = migrate_old_tasks()
+    if migrated > 0:
+        console.print(f"[dim green]✨ Migrated {migrated} task(s) to enhanced format[/]")
+        save_board()
+    
+    max_tasks = max(len(board[col]) for col in board) if any(board.values()) else 0
     columns = list(board.keys())
 
-    # Create a table with three columns
+    # Create a table with enhanced task display
     table = Table(show_header=True, header_style="bold cyan", box=box.DOUBLE_EDGE)
     for col in columns:
-        table.add_column(col, style="bold")
+        table.add_column(col, style="bold", min_width=25)
 
-    for i in range(max_tasks):
-        row = []
-        for col in columns:
-            try:
-                task = board[col][i]
-                short_id = task["id"][:4]
-                row.append(f"[yellow]{task['title']}[/] ({short_id})")
-            except IndexError:
-                row.append("")
-        table.add_row(*row)
+    if max_tasks == 0:
+        # Show empty board message
+        table.add_row(*["[dim]No tasks[/]" for _ in columns])
+    else:
+        for i in range(max_tasks):
+            row = []
+            for col in columns:
+                try:
+                    task = board[col][i]
+                    cell_content = _format_task_cell(task)
+                    row.append(cell_content)
+                except IndexError:
+                    row.append("")
+            table.add_row(*row)
 
     console.print(table)
+    
+    # Show quick stats
+    total_tasks = sum(len(tasks) for tasks in board.values())
+    if total_tasks > 0:
+        overdue_count = sum(1 for tasks in board.values() for task in tasks 
+                           if _is_overdue(task.get('due_date')))
+        if overdue_count > 0:
+            console.print(f"\n[bold red]⚠️ {overdue_count} overdue task(s)[/]")
+        console.print(f"[dim]Total tasks: {total_tasks}[/]")
+
+def _format_task_cell(task: Dict[str, Any]) -> str:
+    """Format a single task for display in the board table."""
+    short_id = task["id"][:4]
+    title = task["title"]
+    
+    # Priority indicator
+    priority = task.get("priority", "medium")
+    priority_symbol = get_priority_symbol(priority)
+    priority_color = get_priority_color(priority)
+    
+    # Build main task line
+    task_line = f"{priority_symbol} [{priority_color}]{title}[/] [dim]({short_id})[/]"
+    
+    # Add due date if present
+    due_date = task.get("due_date")
+    if due_date:
+        due_display = format_due_date(due_date)
+        task_line += f"\n{due_display}"
+    
+    # Add tags if present
+    tags = task.get("tags", [])
+    if tags:
+        tags_display = " ".join(f"[magenta]#{tag}[/]" for tag in tags[:3])  # Limit to first 3 tags
+        if len(tags) > 3:
+            tags_display += f" [dim]+{len(tags)-3}[/]"
+        task_line += f"\n{tags_display}"
+    
+    # Add description preview if present
+    description = task.get("description", "")
+    if description:
+        preview = description[:40] + "..." if len(description) > 40 else description
+        task_line += f"\n[dim italic]{preview}[/]"
+    
+    return task_line
+
+def _is_overdue(due_date_str: Optional[str]) -> bool:
+    """Check if a task is overdue."""
+    if not due_date_str:
+        return False
+    try:
+        due_date = datetime.fromisoformat(due_date_str)
+        return datetime.now() > due_date
+    except ValueError:
+        return False
 #endregion
 
 #region Task Operations
@@ -362,31 +596,104 @@ def display_board():
 # ------------------------------
 
 def add_task():
-    """Add a new task to the 'To Do' column with robust input validation."""
-    max_attempts = 5
+    """Add a new enhanced task to the 'To Do' column with comprehensive input collection."""
+    console.print("\n[bold green]✨ Create New Task[/]")
+    console.print("[dim]Fill in the details below. Fields marked with * are required.[/dim]\n")
     
-    for attempt in range(max_attempts):
-        title = Prompt.ask("[bold green]Enter task title[/]")
-        
-        is_valid, error_msg = validate_title(title)
+    # Title (required)
+    title = None
+    for attempt in range(5):
+        title_input = Prompt.ask("[bold green]*[/] Task title")
+        is_valid, error_msg = validate_title(title_input)
         if is_valid:
-            task = {
-                "id": find_unique_task_id(),
-                "title": title.strip()
-            }
-            board["To Do"].append(task)
-            
-            if save_board():
-                console.print("[green]✅ Task added to To Do![/]")
-            else:
-                console.print("[yellow]⚠️ Task added to board but could not save to file[/]")
-            return
+            title = title_input.strip()
+            break
         else:
             console.print(f"[red]⚠️ {error_msg}[/]")
-            if attempt < max_attempts - 1:
-                console.print(f"[dim]Please try again ({attempt + 1}/{max_attempts} attempts used)[/]")
+            if attempt < 4:
+                console.print(f"[dim]Please try again ({attempt + 1}/5 attempts used)[/]")
     
-    console.print("[red]❌ Too many invalid attempts. Returning to main menu.[/]")
+    if not title:
+        console.print("[red]❌ Too many invalid attempts. Returning to main menu.[/]")
+        return
+    
+    # Description (optional)
+    description = Prompt.ask("[cyan]Description[/] (optional)", default="")
+    
+    # Priority (optional, default medium)
+    priority = None
+    for attempt in range(3):
+        priority_input = Prompt.ask(
+            "[yellow]Priority[/] ([red]high[/]/[yellow]medium[/]/[green]low[/])", 
+            default="medium"
+        )
+        is_valid, error_msg = validate_priority(priority_input)
+        if is_valid:
+            priority = priority_input.strip().lower()
+            break
+        else:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+    
+    if not priority:
+        priority = "medium"  # Fallback to default
+    
+    # Due date (optional)
+    due_date = None
+    due_date_input = Prompt.ask(
+        "[blue]Due date[/] (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS, optional)", 
+        default=""
+    )
+    
+    if due_date_input.strip():
+        is_valid, error_msg = validate_due_date(due_date_input)
+        if is_valid:
+            due_date = due_date_input.strip()
+        else:
+            console.print(f"[red]⚠️ {error_msg}. Skipping due date.[/]")
+    
+    # Tags (optional)
+    tags = []
+    tags_input = Prompt.ask(
+        "[magenta]Tags[/] (comma-separated, optional)", 
+        default=""
+    )
+    
+    if tags_input.strip():
+        is_valid, error_msg = validate_tags(tags_input)
+        if is_valid:
+            tags = [tag.strip() for tag in tags_input.split(',') if tag.strip()]
+        else:
+            console.print(f"[red]⚠️ {error_msg}. Skipping tags.[/]")
+    
+    # Create the enhanced task
+    task = create_enhanced_task(title, description, priority, due_date, tags)
+    
+    # Show preview
+    console.print("\n[bold cyan]📋 Task Preview:[/]")
+    priority_symbol = get_priority_symbol(priority)
+    console.print(f"  Title: [yellow]{task['title']}[/]")
+    console.print(f"  Priority: {priority_symbol} [bold]{priority.title()}[/]")
+    if description:
+        console.print(f"  Description: [dim]{description}[/]")
+    if due_date:
+        due_display = format_due_date(due_date)
+        console.print(f"  Due: {due_display}")
+    if tags:
+        tags_display = ", ".join(f"[magenta]#{tag}[/]" for tag in tags)
+        console.print(f"  Tags: {tags_display}")
+    
+    # Confirm creation
+    confirm = Prompt.ask("\n[bold]Add this task? (Y/n)[/]", default="Y")
+    
+    if confirm.lower() in ['y', 'yes', '']:
+        board["To Do"].append(task)
+        
+        if save_board():
+            console.print(f"\n[green]✅ Task '{task['title']}' added to To Do![/]")
+        else:
+            console.print(f"\n[yellow]⚠️ Task added to board but could not save to file[/]")
+    else:
+        console.print("\n[yellow]❌ Task creation cancelled.[/]")
 
 def move_task():
     """Move a task from one column to another with input validation."""
@@ -519,6 +826,590 @@ def delete_task():
     
     console.print("[red]❌ Too many invalid attempts. Returning to main menu.[/]")
 
+def edit_task():
+    """Edit an existing task with comprehensive field editing."""
+    display_board()
+    
+    # Check if there are any tasks to edit
+    total_tasks = sum(len(tasks) for tasks in board.values())
+    if total_tasks == 0:
+        console.print("[yellow]📋 No tasks available to edit.[/]")
+        return
+    
+    # Find task to edit
+    max_attempts = 5
+    task = None
+    col_name = None
+    
+    for attempt in range(max_attempts):
+        task_id = Prompt.ask("[bold blue]Enter the task ID to edit (first 4 chars)[/]")
+        
+        # Validate task ID format
+        is_valid, error_msg = validate_task_id(task_id)
+        if not is_valid:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+            if attempt < max_attempts - 1:
+                console.print(f"[dim]Please try again ({attempt + 1}/{max_attempts} attempts used)[/]")
+            continue
+        
+        # Find matching tasks
+        matches = find_matching_tasks(task_id.strip())
+        
+        if len(matches) == 0:
+            console.print("[red]❌ Task not found.[/]")
+            if attempt < max_attempts - 1:
+                console.print(f"[dim]Please try again ({attempt + 1}/{max_attempts} attempts used)[/]")
+            continue
+        elif len(matches) > 1:
+            console.print("[yellow]⚠️ Multiple tasks match that ID:[/]")
+            for col_name, task in matches:
+                console.print(f"  [cyan]{task['id'][:8]}[/] - {task['title']} (in {col_name})")
+            console.print("[yellow]Please enter more characters to uniquely identify the task.[/]")
+            if attempt < max_attempts - 1:
+                console.print(f"[dim]Please try again ({attempt + 1}/{max_attempts} attempts used)[/]")
+            continue
+        
+        # Exactly one match found
+        col_name, task = matches[0]
+        break
+    
+    if not task:
+        console.print("[red]❌ Too many invalid attempts. Returning to main menu.[/]")
+        return
+    
+    # Show current task details
+    console.print(f"\n[bold cyan]📝 Editing Task: {task['title']}[/]")
+    _display_task_details(task)
+    
+    # Edit menu loop
+    while True:
+        console.print(Panel.fit(
+            "[bold cyan]1.[/] Edit Title\n"
+            "[bold cyan]2.[/] Edit Description\n"
+            "[bold cyan]3.[/] Edit Priority\n"
+            "[bold cyan]4.[/] Edit Due Date\n"
+            "[bold cyan]5.[/] Edit Tags\n"
+            "[bold cyan]6.[/] Move to Different Column\n"
+            "[bold cyan]7.[/] Finish Editing",
+            title="[bold magenta]EDIT TASK",
+            subtitle="Choose what to edit"
+        ))
+        
+        edit_choice = Prompt.ask("[bold]Enter choice (1-7)[/]")
+        
+        if edit_choice == '1':
+            _edit_task_title(task)
+        elif edit_choice == '2':
+            _edit_task_description(task)
+        elif edit_choice == '3':
+            _edit_task_priority(task)
+        elif edit_choice == '4':
+            _edit_task_due_date(task)
+        elif edit_choice == '5':
+            _edit_task_tags(task)
+        elif edit_choice == '6':
+            _edit_task_column(task, col_name)
+            break  # Moving changes the context, so exit edit mode
+        elif edit_choice == '7':
+            break
+        else:
+            console.print("[red]⚠️ Please enter a number between 1 and 7[/]")
+            continue
+        
+        # Save after each edit and show updated details
+        if save_board():
+            console.print("[green]✅ Changes saved[/]")
+        _display_task_details(task)
+
+def _display_task_details(task: Dict[str, Any]) -> None:
+    """Display detailed task information."""
+    console.print("\n[bold]Current Task Details:[/]")
+    console.print(f"  ID: [cyan]{task['id'][:8]}[/]")
+    console.print(f"  Title: [yellow]{task['title']}[/]")
+    console.print(f"  Description: [dim]{task.get('description', 'No description')}[/]")
+    
+    priority = task.get('priority', 'medium')
+    priority_symbol = get_priority_symbol(priority)
+    console.print(f"  Priority: {priority_symbol} [bold]{priority.title()}[/]")
+    
+    due_date = task.get('due_date')
+    if due_date:
+        due_display = format_due_date(due_date)
+        console.print(f"  Due Date: {due_display}")
+    else:
+        console.print("  Due Date: [dim]Not set[/]")
+    
+    tags = task.get('tags', [])
+    if tags:
+        tags_display = ", ".join(f"[magenta]#{tag}[/]" for tag in tags)
+        console.print(f"  Tags: {tags_display}")
+    else:
+        console.print("  Tags: [dim]None[/]")
+    
+    created_at = task.get('created_at')
+    if created_at:
+        try:
+            created_date = datetime.fromisoformat(created_at)
+            console.print(f"  Created: [dim]{created_date.strftime('%Y-%m-%d %H:%M')}[/]")
+        except ValueError:
+            console.print(f"  Created: [dim]{created_at}[/]")
+
+def _edit_task_title(task: Dict[str, Any]) -> None:
+    """Edit task title."""
+    console.print(f"\n[bold]Current title:[/] {task['title']}")
+    
+    for attempt in range(3):
+        new_title = Prompt.ask("[green]New title[/]")
+        is_valid, error_msg = validate_title(new_title)
+        if is_valid:
+            old_title = task['title']
+            task['title'] = new_title.strip()
+            console.print(f"[green]✅ Title changed from '{old_title}' to '{task['title']}'[/]")
+            return
+        else:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+    
+    console.print("[yellow]❌ Too many invalid attempts. Title unchanged.[/]")
+
+def _edit_task_description(task: Dict[str, Any]) -> None:
+    """Edit task description."""
+    current_desc = task.get('description', '')
+    console.print(f"\n[bold]Current description:[/] {current_desc if current_desc else '[dim]Empty[/]'}")
+    
+    new_description = Prompt.ask("[cyan]New description[/] (enter empty to clear)", default=current_desc)
+    task['description'] = new_description.strip()
+    console.print("[green]✅ Description updated[/]")
+
+def _edit_task_priority(task: Dict[str, Any]) -> None:
+    """Edit task priority."""
+    current_priority = task.get('priority', 'medium')
+    priority_symbol = get_priority_symbol(current_priority)
+    console.print(f"\n[bold]Current priority:[/] {priority_symbol} {current_priority.title()}")
+    
+    for attempt in range(3):
+        new_priority = Prompt.ask(
+            "[yellow]New priority[/] ([red]high[/]/[yellow]medium[/]/[green]low[/])",
+            default=current_priority
+        )
+        is_valid, error_msg = validate_priority(new_priority)
+        if is_valid:
+            task['priority'] = new_priority.strip().lower()
+            new_symbol = get_priority_symbol(task['priority'])
+            console.print(f"[green]✅ Priority changed to {new_symbol} {task['priority'].title()}[/]")
+            return
+        else:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+    
+    console.print("[yellow]❌ Too many invalid attempts. Priority unchanged.[/]")
+
+def _edit_task_due_date(task: Dict[str, Any]) -> None:
+    """Edit task due date."""
+    current_due = task.get('due_date')
+    if current_due:
+        due_display = format_due_date(current_due)
+        console.print(f"\n[bold]Current due date:[/] {due_display}")
+    else:
+        console.print("\n[bold]Current due date:[/] [dim]Not set[/]")
+    
+    new_due_date = Prompt.ask(
+        "[blue]New due date[/] (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS, empty to clear)",
+        default=current_due or ""
+    )
+    
+    if not new_due_date.strip():
+        task['due_date'] = None
+        console.print("[green]✅ Due date cleared[/]")
+    else:
+        is_valid, error_msg = validate_due_date(new_due_date)
+        if is_valid:
+            task['due_date'] = new_due_date.strip()
+            due_display = format_due_date(task['due_date'])
+            console.print(f"[green]✅ Due date set to {due_display}[/]")
+        else:
+            console.print(f"[red]⚠️ {error_msg}. Due date unchanged.[/]")
+
+def _edit_task_tags(task: Dict[str, Any]) -> None:
+    """Edit task tags."""
+    current_tags = task.get('tags', [])
+    if current_tags:
+        tags_display = ", ".join(f"#{tag}" for tag in current_tags)
+        console.print(f"\n[bold]Current tags:[/] {tags_display}")
+    else:
+        console.print("\n[bold]Current tags:[/] [dim]None[/]")
+    
+    new_tags_input = Prompt.ask(
+        "[magenta]New tags[/] (comma-separated, empty to clear)",
+        default=", ".join(current_tags) if current_tags else ""
+    )
+    
+    if not new_tags_input.strip():
+        task['tags'] = []
+        console.print("[green]✅ Tags cleared[/]")
+    else:
+        is_valid, error_msg = validate_tags(new_tags_input)
+        if is_valid:
+            task['tags'] = [tag.strip() for tag in new_tags_input.split(',') if tag.strip()]
+            if task['tags']:
+                tags_display = ", ".join(f"[magenta]#{tag}[/]" for tag in task['tags'])
+                console.print(f"[green]✅ Tags updated to: {tags_display}[/]")
+            else:
+                console.print("[green]✅ Tags cleared[/]")
+        else:
+            console.print(f"[red]⚠️ {error_msg}. Tags unchanged.[/]")
+
+def _edit_task_column(task: Dict[str, Any], current_col: str) -> None:
+    """Move task to a different column."""
+    available_cols = [col for col in board.keys() if col != current_col]
+    if not available_cols:
+        console.print("[yellow]⚠️ Task is already in the only available column.[/]")
+        return
+    
+    new_col = Prompt.ask(
+        f"Move '{task['title']}' from {current_col} to which column?",
+        choices=list(board.keys())
+    )
+    
+    if new_col == current_col:
+        console.print("[yellow]⚠️ Task is already in that column.[/]")
+        return
+    
+    # Perform the move
+    board[current_col].remove(task)
+    board[new_col].append(task)
+    
+    console.print(f"[green]✅ Moved '{task['title']}' to {new_col}.[/]")
+
+def search_and_filter_tasks():
+    """Search and filter tasks based on various criteria."""
+    console.print("\n[bold magenta]🔍 Search & Filter Tasks[/]")
+    console.print("[dim]Enter criteria to filter tasks. Leave empty to skip a filter.[/dim]\n")
+    
+    # Get filter criteria
+    title_search = Prompt.ask("[yellow]Search in title[/] (partial match, optional)", default="")
+    description_search = Prompt.ask("[cyan]Search in description[/] (partial match, optional)", default="")
+    
+    # Priority filter
+    priority_filter = Prompt.ask(
+        "[yellow]Filter by priority[/] ([red]high[/]/[yellow]medium[/]/[green]low[/], optional)",
+        default=""
+    )
+    if priority_filter and priority_filter.lower() not in ['high', 'medium', 'low']:
+        console.print("[red]⚠️ Invalid priority. Ignoring priority filter.[/]")
+        priority_filter = ""
+    
+    # Column filter
+    column_filter = Prompt.ask(
+        "[blue]Filter by column[/] (To Do/In Progress/Done, optional)",
+        default=""
+    )
+    if column_filter and column_filter not in board.keys():
+        console.print("[red]⚠️ Invalid column. Ignoring column filter.[/]")
+        column_filter = ""
+    
+    # Tag filter
+    tag_search = Prompt.ask("[magenta]Search in tags[/] (partial match, optional)", default="")
+    
+    # Due date filter
+    due_filter = Prompt.ask(
+        "[blue]Due date filter[/] ([red]overdue[/]/[yellow]today[/]/[green]upcoming[/], optional)",
+        default=""
+    )
+    if due_filter and due_filter.lower() not in ['overdue', 'today', 'upcoming']:
+        console.print("[red]⚠️ Invalid due filter. Ignoring due date filter.[/]")
+        due_filter = ""
+    
+    # Apply filters
+    matching_tasks = filter_tasks(
+        title_search=title_search.strip(),
+        description_search=description_search.strip(),
+        priority_filter=priority_filter.strip().lower() if priority_filter else None,
+        column_filter=column_filter.strip() if column_filter else None,
+        tag_search=tag_search.strip(),
+        due_filter=due_filter.strip().lower() if due_filter else None
+    )
+    
+    # Display results
+    _display_filtered_tasks(matching_tasks)
+
+def filter_tasks(
+    title_search: str = "",
+    description_search: str = "",
+    priority_filter: Optional[str] = None,
+    column_filter: Optional[str] = None,
+    tag_search: str = "",
+    due_filter: Optional[str] = None
+) -> List[Tuple[str, Dict[str, Any]]]:
+    """Filter tasks based on multiple criteria.
+    
+    Returns:
+        List of (column_name, task) tuples that match all criteria
+    """
+    matching_tasks = []
+    now = datetime.now()
+    
+    for col_name, tasks in board.items():
+        # Apply column filter first
+        if column_filter and col_name != column_filter:
+            continue
+            
+        for task in tasks:
+            # Title search
+            if title_search and title_search.lower() not in task['title'].lower():
+                continue
+            
+            # Description search
+            description = task.get('description', '')
+            if description_search and description_search.lower() not in description.lower():
+                continue
+            
+            # Priority filter
+            if priority_filter and task.get('priority', 'medium') != priority_filter:
+                continue
+            
+            # Tag search
+            if tag_search:
+                tags = task.get('tags', [])
+                tag_match = any(tag_search.lower() in tag.lower() for tag in tags)
+                if not tag_match:
+                    continue
+            
+            # Due date filter
+            if due_filter:
+                due_date_str = task.get('due_date')
+                if not due_date_str:
+                    continue
+                
+                try:
+                    due_date = datetime.fromisoformat(due_date_str)
+                    days_diff = (due_date - now).days
+                    
+                    if due_filter == 'overdue' and days_diff >= 0:
+                        continue
+                    elif due_filter == 'today' and days_diff != 0:
+                        continue
+                    elif due_filter == 'upcoming' and days_diff <= 0:
+                        continue
+                except ValueError:
+                    continue
+            
+            # If we get here, task matches all criteria
+            matching_tasks.append((col_name, task))
+    
+    return matching_tasks
+
+def _display_filtered_tasks(matching_tasks: List[Tuple[str, Dict[str, Any]]]) -> None:
+    """Display filtered tasks in a formatted table."""
+    console.print(f"\n[bold cyan]🔍 Search Results: {len(matching_tasks)} task(s) found[/]")
+    
+    if not matching_tasks:
+        console.print("[yellow]No tasks match your criteria.[/]")
+        return
+    
+    # Create results table
+    table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+    table.add_column("ID", style="cyan", width=8)
+    table.add_column("Title", style="yellow", min_width=20)
+    table.add_column("Column", style="blue", width=12)
+    table.add_column("Priority", style="bold", width=10)
+    table.add_column("Due Date", style="dim", width=15)
+    table.add_column("Tags", style="magenta", width=20)
+    
+    for col_name, task in matching_tasks:
+        # Format each field
+        task_id = task['id'][:8]
+        title = task['title'][:30] + "..." if len(task['title']) > 30 else task['title']
+        
+        priority = task.get('priority', 'medium')
+        priority_symbol = get_priority_symbol(priority)
+        priority_display = f"{priority_symbol} {priority.title()}"
+        
+        due_date = task.get('due_date')
+        due_display = format_due_date(due_date) if due_date else "[dim]None[/]"
+        
+        tags = task.get('tags', [])
+        tags_display = ", ".join(f"#{tag}" for tag in tags[:2])  # Show first 2 tags
+        if len(tags) > 2:
+            tags_display += f" +{len(tags)-2}"
+        if not tags_display:
+            tags_display = "[dim]None[/]"
+        
+        table.add_row(task_id, title, col_name, priority_display, due_display, tags_display)
+    
+    console.print(table)
+    
+    # Option to view detailed info for a specific task
+    if len(matching_tasks) <= 10:  # Only offer if reasonable number of results
+        console.print("\n[dim]Enter a task ID to view full details, or press Enter to continue...[/]")
+        detail_choice = Prompt.ask("[blue]Task ID (optional)[/]", default="")
+        
+        if detail_choice.strip():
+            # Find the task in results
+            detail_matches = []
+            fragment = detail_choice.strip().lower()
+            for col_name, task in matching_tasks:
+                if task['id'][:len(fragment)].lower() == fragment:
+                    detail_matches.append((col_name, task))
+            
+            if len(detail_matches) == 1:
+                _, task = detail_matches[0]
+                console.print(f"\n[bold cyan]📝 Full Task Details:[/]")
+                _display_task_details(task)
+            elif len(detail_matches) > 1:
+                console.print("[yellow]⚠️ Multiple tasks match that ID in results.[/]")
+            else:
+                console.print("[red]❌ Task ID not found in search results.[/]")
+
+def view_statistics():
+    """Display comprehensive statistics about the Kanban board."""
+    console.clear()
+    console.rule("[bold magenta]📊 BOARD STATISTICS[/]")
+    
+    stats = compute_board_statistics()
+    
+    # Overall Stats Panel
+    overall_content = (
+        f"[bold cyan]Total Tasks:[/] {stats['total_tasks']}\n"
+        f"[dim green]To Do:[/] {stats['by_column']['To Do']}\n"
+        f"[dim yellow]In Progress:[/] {stats['by_column']['In Progress']}\n"
+        f"[dim blue]Done:[/] {stats['by_column']['Done']}"
+    )
+    
+    console.print(Panel.fit(
+        overall_content,
+        title="[bold green]📈 Overview",
+        border_style="green"
+    ))
+    
+    # Priority Stats Panel
+    priority_content = (
+        f"🔴 [red]High Priority:[/] {stats['by_priority']['high']}\n"
+        f"🟡 [yellow]Medium Priority:[/] {stats['by_priority']['medium']}\n"
+        f"🟢 [green]Low Priority:[/] {stats['by_priority']['low']}"
+    )
+    
+    console.print(Panel.fit(
+        priority_content,
+        title="[bold yellow]🎨 Priority Breakdown",
+        border_style="yellow"
+    ))
+    
+    # Due Date Stats Panel
+    due_content = (
+        f"⏰ [red]Overdue:[/] {stats['due_stats']['overdue']}\n"
+        f"⏳ [yellow]Due Today:[/] {stats['due_stats']['due_today']}\n"
+        f"📅 [green]Upcoming (next 7 days):[/] {stats['due_stats']['upcoming']}\n"
+        f"[dim]No Due Date:[/] {stats['due_stats']['no_due_date']}"
+    )
+    
+    due_panel_style = "red" if stats['due_stats']['overdue'] > 0 else "blue"
+    console.print(Panel.fit(
+        due_content,
+        title="[bold blue]📅 Due Date Status",
+        border_style=due_panel_style
+    ))
+    
+    # Overdue Tasks Warning
+    if stats['overdue_tasks']:
+        overdue_content = "\n".join([
+            f"[red]{task['id'][:4]}[/] - {task['title'][:50]}"
+            for task in stats['overdue_tasks'][:10]  # Show first 10
+        ])
+        
+        if len(stats['overdue_tasks']) > 10:
+            overdue_content += f"\n[dim]... and {len(stats['overdue_tasks']) - 10} more[/]"
+        
+        console.print(Panel.fit(
+            overdue_content,
+            title="[bold red]⚠️ OVERDUE TASKS",
+            border_style="red"
+        ))
+    
+    # Tags Statistics
+    if stats['tag_usage']:
+        tag_content = "\n".join([
+            f"[magenta]#{tag}[/]: {count} task(s)"
+            for tag, count in stats['tag_usage'][:10]  # Show top 10 tags
+        ])
+        
+        if len(stats['tag_usage']) > 10:
+            tag_content += f"\n[dim]... and {len(stats['tag_usage']) - 10} more tags[/]"
+        
+        console.print(Panel.fit(
+            tag_content,
+            title="[bold magenta]🏷️ Top Tags",
+            border_style="magenta"
+        ))
+    
+    console.print(f"\n[dim]Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/]")
+
+def compute_board_statistics() -> Dict[str, Any]:
+    """Compute comprehensive statistics about the board.
+    
+    Returns:
+        Dictionary containing various statistics
+    """
+    stats = {
+        'total_tasks': 0,
+        'by_column': {col: 0 for col in board.keys()},
+        'by_priority': {'high': 0, 'medium': 0, 'low': 0},
+        'due_stats': {
+            'overdue': 0,
+            'due_today': 0,
+            'upcoming': 0,  # Due within 7 days
+            'no_due_date': 0
+        },
+        'overdue_tasks': [],
+        'tag_usage': []  # List of (tag, count) tuples
+    }
+    
+    now = datetime.now()
+    tag_counts = {}
+    
+    for col_name, tasks in board.items():
+        stats['by_column'][col_name] = len(tasks)
+        stats['total_tasks'] += len(tasks)
+        
+        for task in tasks:
+            # Priority stats
+            priority = task.get('priority', 'medium')
+            if priority in stats['by_priority']:
+                stats['by_priority'][priority] += 1
+            
+            # Due date stats
+            due_date_str = task.get('due_date')
+            if not due_date_str:
+                stats['due_stats']['no_due_date'] += 1
+            else:
+                try:
+                    due_date = datetime.fromisoformat(due_date_str)
+                    days_diff = (due_date - now).days
+                    
+                    if days_diff < 0:
+                        stats['due_stats']['overdue'] += 1
+                        stats['overdue_tasks'].append(task)
+                    elif days_diff == 0:
+                        stats['due_stats']['due_today'] += 1
+                    elif days_diff <= 7:
+                        stats['due_stats']['upcoming'] += 1
+                except ValueError:
+                    stats['due_stats']['no_due_date'] += 1
+            
+            # Tag usage stats
+            tags = task.get('tags', [])
+            for tag in tags:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    
+    # Sort tags by usage count (descending)
+    stats['tag_usage'] = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Sort overdue tasks by due date (most overdue first)
+    stats['overdue_tasks'] = sorted(
+        stats['overdue_tasks'],
+        key=lambda x: datetime.fromisoformat(x['due_date']) if x.get('due_date') else datetime.max
+    )
+    
+    return stats
+
 #endregion
 
 #region Main Menu
@@ -527,7 +1418,7 @@ def delete_task():
 # ------------------------------
 
 def main_menu():
-    """Main menu with robust input validation and error handling."""
+    """Enhanced main menu with comprehensive task management features."""
     if not load_board():
         console.print("[yellow]⚠️ Warning: Running in read-only mode (file operations may fail)[/]")
     
@@ -536,10 +1427,13 @@ def main_menu():
             console.print(Panel.fit(
                 "[bold cyan]1.[/] View Board\n"
                 "[bold cyan]2.[/] Add Task\n"
-                "[bold cyan]3.[/] Move Task\n"
-                "[bold cyan]4.[/] Delete Task\n"
-                "[bold cyan]5.[/] Exit",
-                title="[bold magenta]KANBAN MENU",
+                "[bold cyan]3.[/] Edit Task\n"
+                "[bold cyan]4.[/] Move Task\n"
+                "[bold cyan]5.[/] Delete Task\n"
+                "[bold cyan]6.[/] Search & Filter\n"
+                "[bold cyan]7.[/] View Statistics\n"
+                "[bold cyan]8.[/] Exit",
+                title="[bold magenta]ENHANCED KANBAN MENU",
                 subtitle="Choose an option"
             ))
 
@@ -548,7 +1442,7 @@ def main_menu():
             
             for attempt in range(max_attempts):
                 try:
-                    raw_choice = Prompt.ask("[bold]Enter choice (1-5)[/]")
+                    raw_choice = Prompt.ask("[bold]Enter choice (1-8)[/]")
                     is_valid, error_msg = validate_menu_choice(raw_choice)
                     
                     if is_valid:
@@ -577,11 +1471,19 @@ def main_menu():
             elif choice == '2':
                 add_task()
             elif choice == '3':
-                move_task()
+                edit_task()
             elif choice == '4':
-                delete_task()
+                move_task()
             elif choice == '5':
-                console.print("[bold yellow]👋 Exiting Kanban Board. Goodbye![/]")
+                delete_task()
+            elif choice == '6':
+                search_and_filter_tasks()
+                input("\n[dim]Press Enter to continue...[/dim]")
+            elif choice == '7':
+                view_statistics()
+                input("\n[dim]Press Enter to continue...[/dim]")
+            elif choice == '8':
+                console.print("[bold yellow]👋 Exiting Enhanced Kanban Board. Goodbye![/]")
                 break
                 
         except KeyboardInterrupt:

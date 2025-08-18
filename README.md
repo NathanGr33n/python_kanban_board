@@ -1,18 +1,23 @@
-# 📋 Python Kanban Board
+# 📋 Enhanced Python Kanban Board
 
-A robust, terminal-based Kanban board application written in Python with enterprise-level error handling and data safety features.
+A feature-rich, terminal-based Kanban board application written in Python with enterprise-level error handling, enhanced task management, and comprehensive analytics.
 
 ![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Rich](https://img.shields.io/badge/UI-Rich-purple.svg)
+![Features](https://img.shields.io/badge/features-enhanced-brightgreen.svg)
 
 ## ✨ Features
 
-### Core Functionality
+### 🆕 Enhanced Task Management
 - **📊 Three-Column Board**: "To Do", "In Progress", "Done"
-- **🎯 Task Management**: Add, move, delete tasks with unique IDs
+- **🎯 Rich Task Properties**: Title, description, priority, due dates, and tags
+- **🔴🟡🟢 Priority System**: Visual priority indicators with color coding
+- **📅 Due Date Tracking**: Smart due date display with overdue warnings
+- **🏷️ Tagging System**: Organize tasks with customizable tags
+- **✏️ In-Place Editing**: Edit any task field after creation
 - **🎨 Beautiful Interface**: Rich terminal UI with colors and formatting
-- **💾 Persistent Storage**: JSON-based data persistence
+- **💾 Persistent Storage**: JSON-based data persistence with auto-migration
 
 ### 🛡️ Enterprise-Grade Reliability
 - **🔒 Atomic File Operations**: Prevents data corruption during saves
