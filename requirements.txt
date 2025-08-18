@@ -1,0 +1,12 @@
+# Python Kanban Board Dependencies
+# Core UI library for rich terminal display
+rich>=13.0.0
+
+# Standard library modules used (included with Python):
+# - json
+# - os  
+# - uuid
+# - tempfile
+# - shutil
+# - datetime
+# - typing
