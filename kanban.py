@@ -232,11 +232,34 @@ def validate_board_name(board_name: str) -> Tuple[bool, str]:
 
 def validate_json_structure(data: Any) -> Tuple[bool, str]:
     """Validate that loaded JSON has the correct kanban board structure.
-    Supports both old (id, title) and new (enhanced) task formats.
     
+    Supports both old (id, title) and new (enhanced) task formats.
+
     Returns:
         Tuple of (is_valid, error_message)
     """
+    
+    def validate_subtasks(subtasks: Any) -> Tuple[bool, str]:
+        if not isinstance(subtasks, list):
+            return False, "Subtasks must be a list"
+        
+        # Prevent excessive nesting (only allow 1 level of subtasks)
+        for i, stask in enumerate(subtasks):
+            if not isinstance(stask, dict):
+                return False, f"Subtask {i+1} must be a dictionary"
+            
+            # Required fields for subtask
+            if "id" not in stask or "title" not in stask or "completed" not in stask:
+                return False, f"Subtask {i+1} missing required fields (id, title, completed)"
+            
+            if not isinstance(stask["id"], str) or not isinstance(stask["title"], str) or not isinstance(stask["completed"], bool):
+                return False, f"Subtask {i+1} has invalid field types"
+            
+            # No nested subtasks beyond first level
+            if "subtasks" in stask and stask["subtasks"]:
+                return False, f"Subtask {i+1} should not have nested subtasks"
+        return True, ""
+
     if not isinstance(data, dict):
         return False, "Data must be a dictionary"
     
@@ -278,6 +301,12 @@ def validate_json_structure(data: Any) -> Tuple[bool, str]:
             
             if "tags" in task and not isinstance(task["tags"], list):
                 return False, f"Task {i+1} in '{column}' tags must be a list"
+            
+            # Validate subtasks if present
+            if "subtasks" in task:
+                is_valid, error_msg = validate_subtasks(task["subtasks"])
+                if not is_valid:
+                    return False, f"Task {i+1} in '{column}' subtasks error: {error_msg}"
     
     return True, ""
 
@@ -416,8 +445,88 @@ def create_enhanced_task(title: str, description: str = "", priority: str = "med
         "priority": priority.lower(),
         "created_at": datetime.now().isoformat(),
         "due_date": due_date,
-        "tags": tags
+        "tags": tags,
+        "subtasks": []
     }
+
+def validate_subtask_title(title: str) -> Tuple[bool, str]:
+    """Validate subtask title input.
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not title or not title.strip():
+        return False, "Subtask title cannot be empty"
+    
+    title = title.strip()
+    if len(title) > 80:  # Slightly shorter than main tasks
+        return False, "Subtask title must be 80 characters or less"
+    
+    if len(title) < 1:
+        return False, "Subtask title must be at least 1 character"
+    
+    # Check for control characters (except newlines which we'll strip)
+    if any(ord(char) < 32 and char not in '\n\r\t' for char in title):
+        return False, "Subtask title contains invalid characters"
+    
+    return True, ""
+
+def create_subtask(title: str) -> Dict[str, Any]:
+    """Create a new subtask with basic fields.
+    
+    Returns:
+        Dict containing the new subtask
+    """
+    return {
+        "id": str(uuid.uuid4())[:8],  # Shorter ID for subtasks
+        "title": title.strip(),
+        "completed": False,
+        "created_at": datetime.now().isoformat()
+    }
+
+def calculate_subtask_progress(task: Dict[str, Any]) -> Tuple[int, int, float]:
+    """Calculate subtask completion progress.
+    
+    Returns:
+        Tuple of (completed_count, total_count, percentage)
+    """
+    subtasks = task.get("subtasks", [])
+    if not subtasks:
+        return 0, 0, 0.0
+    
+    total_count = len(subtasks)
+    completed_count = sum(1 for subtask in subtasks if subtask.get("completed", False))
+    percentage = (completed_count / total_count) * 100 if total_count > 0 else 0.0
+    
+    return completed_count, total_count, percentage
+
+def find_subtask_by_id(task: Dict[str, Any], subtask_id: str) -> Optional[Dict[str, Any]]:
+    """Find a subtask by its ID within a task.
+    
+    Returns:
+        Subtask dict if found, None otherwise
+    """
+    subtasks = task.get("subtasks", [])
+    for subtask in subtasks:
+        if subtask["id"].lower().startswith(subtask_id.lower()):
+            return subtask
+    return None
+
+def get_subtask_matches(task: Dict[str, Any], subtask_id_fragment: str) -> List[Dict[str, Any]]:
+    """Get all subtasks that match the given ID fragment.
+    
+    Returns:
+        List of matching subtasks
+    """
+    subtasks = task.get("subtasks", [])
+    fragment_lower = subtask_id_fragment.lower()
+    matches = []
+    
+    for subtask in subtasks:
+        if subtask["id"].lower().startswith(fragment_lower):
+            matches.append(subtask)
+    
+    return matches
 
 #endregion
 
