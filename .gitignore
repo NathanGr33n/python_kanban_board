@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Warp
+WARP.md
+
 # Project-specific data files
 kanban_data.json
 *.json.bak
