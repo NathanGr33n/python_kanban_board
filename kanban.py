@@ -27,6 +27,25 @@ board = {
     "In Progress": [],
     "Done": []
 }
+
+# Keyboard shortcuts mapping
+KEYBOARD_SHORTCUTS = {
+    '1': {'action': '1', 'desc': 'View Board', 'key': 'v'},
+    '2': {'action': '2', 'desc': 'Add Task', 'key': 'a'},
+    '3': {'action': '3', 'desc': 'Edit Task', 'key': 'e'},
+    '4': {'action': '4', 'desc': 'Move Task', 'key': 'm'},
+    '5': {'action': '5', 'desc': 'Delete Task', 'key': 'd'},
+    '6': {'action': '6', 'desc': 'Search & Filter', 'key': 's'},
+    '7': {'action': '7', 'desc': 'View Statistics', 'key': 'r'},  # 'r' for reports
+    '8': {'action': '8', 'desc': 'Exit', 'key': 'q'},
+    'help': {'action': 'help', 'desc': 'Show Help', 'key': 'h'}
+}
+
+# Reverse lookup for shortcuts to actions
+SHORTCUT_TO_ACTION = {}
+for action, info in KEYBOARD_SHORTCUTS.items():
+    SHORTCUT_TO_ACTION[info['key']] = action
+SHORTCUT_TO_ACTION['?'] = 'help'  # Alternative help key
 #endregion
 
 #region HelperFunctions
@@ -87,7 +106,7 @@ def validate_task_id(task_id: str) -> Tuple[bool, str]:
     return True, ""
 
 def validate_menu_choice(choice: str) -> Tuple[bool, str]:
-    """Validate menu choice input.
+    """Validate menu choice input - accepts both numbers and keyboard shortcuts.
     
     Returns:
         Tuple of (is_valid, error_message)
@@ -95,11 +114,19 @@ def validate_menu_choice(choice: str) -> Tuple[bool, str]:
     if not choice or not choice.strip():
         return False, "Please enter a choice"
     
-    choice = choice.strip()
-    if choice not in ['1', '2', '3', '4', '5', '6', '7', '8']:
-        return False, "Please enter a number between 1 and 8"
+    choice = choice.strip().lower()
     
-    return True, ""
+    # Check if it's a valid number choice
+    if choice in ['1', '2', '3', '4', '5', '6', '7', '8']:
+        return True, ""
+    
+    # Check if it's a valid keyboard shortcut
+    if choice in SHORTCUT_TO_ACTION:
+        return True, ""
+    
+    # Show helpful error message with available options
+    shortcuts_desc = ", ".join([f"'{info['key']}' ({info['desc']})" for info in KEYBOARD_SHORTCUTS.values()])
+    return False, f"Please enter 1-8 or use shortcuts: {shortcuts_desc}"
 
 def validate_priority(priority: str) -> Tuple[bool, str]:
     """Validate task priority input.
@@ -1412,6 +1439,91 @@ def compute_board_statistics() -> Dict[str, Any]:
 
 #endregion
 
+#region Help System
+# ------------------------------
+# Help System
+# ------------------------------
+
+def show_keyboard_shortcuts_help():
+    """Display comprehensive help screen for keyboard shortcuts and features."""
+    console.clear()
+    console.rule("[bold green]⌨️ KEYBOARD SHORTCUTS HELP[/]")
+    
+    # Main menu shortcuts
+    shortcuts_table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+    shortcuts_table.add_column("Shortcut", style="bold cyan", width=10)
+    shortcuts_table.add_column("Number", style="dim", width=8)
+    shortcuts_table.add_column("Action", style="yellow", min_width=20)
+    shortcuts_table.add_column("Description", style="dim", min_width=30)
+    
+    # Add main menu shortcuts
+    for action, info in KEYBOARD_SHORTCUTS.items():
+        if action != 'help':  # Skip help entry for main table
+            shortcuts_table.add_row(
+                f"[bold cyan]{info['key']}[/]",
+                action,
+                info['desc'],
+                f"Same as menu option {action}"
+            )
+    
+    # Add special shortcuts
+    shortcuts_table.add_row(
+        "[bold cyan]h[/] or [bold cyan]?[/]",
+        "-",
+        "Show Help",
+        "Display this help screen"
+    )
+    
+    console.print(shortcuts_table)
+    
+    # Additional help sections
+    console.print("\n[bold magenta]💡 Tips & Features:[/]")
+    
+    tips_panel = Panel.fit(
+        "• [cyan]Quick Navigation:[/] Use single letters instead of numbers\n"
+        "• [cyan]Case Insensitive:[/] Both 'A' and 'a' work for Add Task\n"
+        "• [cyan]Task IDs:[/] Only need first 4 characters to identify tasks\n"
+        "• [cyan]Validation:[/] System prevents ambiguous task ID matches\n"
+        "• [cyan]Auto-save:[/] Changes are automatically saved to disk\n"
+        "• [cyan]Backup Recovery:[/] Corrupted files are automatically backed up\n"
+        "• [cyan]Rich Formatting:[/] Colored priority indicators and due date warnings\n"
+        "• [cyan]Enhanced Tasks:[/] Support for descriptions, priorities, due dates, and tags",
+        title="[bold green]🌟 Features",
+        border_style="green"
+    )
+    console.print(tips_panel)
+    
+    # Task management help
+    task_help_panel = Panel.fit(
+        "• [yellow]Priority Levels:[/] 🔴 High, 🟡 Medium, 🟢 Low\n"
+        "• [yellow]Due Dates:[/] Format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS\n"
+        "• [yellow]Tags:[/] Comma-separated, alphanumeric with hyphens/underscores\n"
+        "• [yellow]Task IDs:[/] Generated automatically, use first 4+ chars to reference\n"
+        "• [yellow]Columns:[/] To Do → In Progress → Done (moveable)\n"
+        "• [yellow]Search:[/] Filter by title, description, priority, tags, due dates",
+        title="[bold yellow]📋 Task Management",
+        border_style="yellow"
+    )
+    console.print(task_help_panel)
+    
+    # Error recovery help
+    recovery_panel = Panel.fit(
+        "• [red]Data Safety:[/] All file operations use atomic writes\n"
+        "• [red]Corruption Recovery:[/] Automatic backup with timestamps\n"
+        "• [red]Retry Logic:[/] Exponential backoff for transient failures\n"
+        "• [red]Validation:[/] All inputs validated with helpful error messages\n"
+        "• [red]Read-only Mode:[/] Continues operation if file saves fail\n"
+        "• [red]Migration:[/] Old task formats automatically upgraded",
+        title="[bold red]🛡️ Data Safety",
+        border_style="red"
+    )
+    console.print(recovery_panel)
+    
+    console.print(f"\n[dim]Enhanced Kanban Board v2.0 • Press Enter to return to main menu[/]")
+    input()
+
+#endregion
+
 #region Main Menu
 # ------------------------------
 # Main Menu
@@ -1425,16 +1537,16 @@ def main_menu():
     while True:
         try:
             console.print(Panel.fit(
-                "[bold cyan]1.[/] View Board\n"
-                "[bold cyan]2.[/] Add Task\n"
-                "[bold cyan]3.[/] Edit Task\n"
-                "[bold cyan]4.[/] Move Task\n"
-                "[bold cyan]5.[/] Delete Task\n"
-                "[bold cyan]6.[/] Search & Filter\n"
-                "[bold cyan]7.[/] View Statistics\n"
-                "[bold cyan]8.[/] Exit",
+                "[bold cyan]1.[/] View Board         [dim]([cyan]v[/])[/]\n"
+                "[bold cyan]2.[/] Add Task          [dim]([cyan]a[/])[/]\n"
+                "[bold cyan]3.[/] Edit Task         [dim]([cyan]e[/])[/]\n"
+                "[bold cyan]4.[/] Move Task         [dim]([cyan]m[/])[/]\n"
+                "[bold cyan]5.[/] Delete Task       [dim]([cyan]d[/])[/]\n"
+                "[bold cyan]6.[/] Search & Filter   [dim]([cyan]s[/])[/]\n"
+                "[bold cyan]7.[/] View Statistics    [dim]([cyan]r[/])[/]\n"
+                "[bold cyan]8.[/] Exit              [dim]([cyan]q[/])[/]",
                 title="[bold magenta]ENHANCED KANBAN MENU",
-                subtitle="Choose an option"
+                subtitle="Enter number or shortcut key • [dim cyan]h[/dim cyan] for help"
             ))
 
             max_attempts = 3
@@ -1463,6 +1575,16 @@ def main_menu():
             if not choice:
                 console.print("[red]❌ Too many invalid attempts. Exiting...[/]")
                 break
+            
+            # Convert keyboard shortcut to action number if needed
+            choice_lower = choice.lower()
+            if choice_lower in SHORTCUT_TO_ACTION:
+                action = SHORTCUT_TO_ACTION[choice_lower]
+                if action == 'help':
+                    show_keyboard_shortcuts_help()
+                    continue
+                else:
+                    choice = action  # Convert shortcut to number
             
             # Execute menu choice
             if choice == '1':
