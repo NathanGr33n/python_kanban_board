@@ -19,9 +19,33 @@ from rich import box
 #region Setup
 #--------------- Setup ---------------#
 console = Console()
-# File where tasks are stored
+# File where data is stored
 DATA_FILE = 'kanban_data.json'
-# Initial board structure
+
+# Multiple boards data structure
+# {
+#   "format_version": "2.0",
+#   "current_board": "board_id",
+#   "boards": {
+#     "board_id": {
+#       "name": "Board Name",
+#       "created_at": "ISO-datetime",
+#       "last_modified": "ISO-datetime",
+#       "columns": {
+#         "To Do": [],
+#         "In Progress": [],
+#         "Done": []
+#       }
+#     }
+#   }
+# }
+boards_data = {
+    "format_version": "2.0",
+    "current_board": None,
+    "boards": {}
+}
+
+# Legacy single board structure for backwards compatibility
 board = {
     "To Do": [],
     "In Progress": [],
@@ -37,7 +61,8 @@ KEYBOARD_SHORTCUTS = {
     '5': {'action': '5', 'desc': 'Delete Task', 'key': 'd'},
     '6': {'action': '6', 'desc': 'Search & Filter', 'key': 's'},
     '7': {'action': '7', 'desc': 'View Statistics', 'key': 'r'},  # 'r' for reports
-    '8': {'action': '8', 'desc': 'Exit', 'key': 'q'},
+    '8': {'action': '8', 'desc': 'Board Management', 'key': 'b'},
+    '9': {'action': '9', 'desc': 'Exit', 'key': 'q'},
     'help': {'action': 'help', 'desc': 'Show Help', 'key': 'h'}
 }
 
@@ -117,7 +142,7 @@ def validate_menu_choice(choice: str) -> Tuple[bool, str]:
     choice = choice.strip().lower()
     
     # Check if it's a valid number choice
-    if choice in ['1', '2', '3', '4', '5', '6', '7', '8']:
+    if choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
         return True, ""
     
     # Check if it's a valid keyboard shortcut
@@ -126,7 +151,7 @@ def validate_menu_choice(choice: str) -> Tuple[bool, str]:
     
     # Show helpful error message with available options
     shortcuts_desc = ", ".join([f"'{info['key']}' ({info['desc']})" for info in KEYBOARD_SHORTCUTS.values()])
-    return False, f"Please enter 1-8 or use shortcuts: {shortcuts_desc}"
+    return False, f"Please enter 1-9 or use shortcuts: {shortcuts_desc}"
 
 def validate_priority(priority: str) -> Tuple[bool, str]:
     """Validate task priority input.
@@ -176,6 +201,32 @@ def validate_tags(tags_str: str) -> Tuple[bool, str]:
             return False, "Each tag must be 20 characters or less"
         if not tag.replace('_', '').replace('-', '').isalnum():
             return False, "Tags can only contain letters, numbers, hyphens, and underscores"
+    
+    return True, ""
+
+def validate_board_name(board_name: str) -> Tuple[bool, str]:
+    """Validate board name input.
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not board_name or not board_name.strip():
+        return False, "Board name cannot be empty"
+    
+    board_name = board_name.strip()
+    if len(board_name) > 50:
+        return False, "Board name must be 50 characters or less"
+    
+    if len(board_name) < 1:
+        return False, "Board name must be at least 1 character"
+    
+    # Check for control characters and invalid filename characters
+    invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+    if any(char in board_name for char in invalid_chars):
+        return False, "Board name contains invalid characters (< > : \" / \\ | ? *)"
+    
+    if any(ord(char) < 32 for char in board_name):
+        return False, "Board name contains invalid control characters"
     
     return True, ""
 
@@ -373,11 +424,12 @@ def create_enhanced_task(title: str, description: str = "", priority: str = "med
 #region Load&Save
 def load_board() -> bool:
     """Load the saved board from a JSON file with error handling and corruption recovery.
+    Supports both single-board (legacy) and multiple-board formats with automatic migration.
     
     Returns:
         bool: True if loaded successfully, False if had to recover from corruption
     """
-    global board
+    global board, boards_data
     
     if not os.path.exists(DATA_FILE):
         console.print("[yellow]📄 No existing data file found. Creating new board...[/]")
@@ -389,17 +441,11 @@ def load_board() -> bool:
         with open(DATA_FILE, 'r', encoding='utf-8') as file:
             data = json.load(file)
         
-        # Validate the JSON structure
-        is_valid, error_msg = validate_json_structure(data)
-        if not is_valid:
-            raise ValueError(f"Invalid board structure: {error_msg}")
-        
-        # Load the data into the board
-        for column in board:
-            board[column] = data.get(column, [])
-        
-        console.print("[green]✅ Board loaded successfully[/]")
-        return True
+        # Detect data format and handle accordingly
+        if _is_multiple_boards_format(data):
+            return _load_multiple_boards_format(data)
+        else:
+            return _load_single_board_format(data)
         
     except FileNotFoundError:
         display_error("Data file was deleted while running")
@@ -423,6 +469,163 @@ def load_board() -> bool:
         display_error(f"System error reading {DATA_FILE}", e)
         console.print("[yellow]📋 Starting with empty board[/]")
         return False
+
+def _is_multiple_boards_format(data: Any) -> bool:
+    """Check if the loaded data is in multiple boards format.
+    
+    Returns:
+        bool: True if data is multiple boards format, False if legacy single board
+    """
+    # Multiple boards format has format_version and boards keys
+    if isinstance(data, dict):
+        has_format_version = 'format_version' in data
+        has_boards = 'boards' in data
+        
+        # Check if it looks like multiple boards format
+        if has_format_version or has_boards:
+            return True
+        
+        # Check if it looks like legacy single board (has To Do, In Progress, Done)
+        legacy_columns = ['To Do', 'In Progress', 'Done']
+        if all(col in data for col in legacy_columns):
+            return False
+    
+    return False
+
+def _load_multiple_boards_format(data: Dict[str, Any]) -> bool:
+    """Load data in multiple boards format.
+    
+    Returns:
+        bool: True if loaded successfully, False otherwise
+    """
+    global board, boards_data
+    
+    try:
+        # Validate multiple boards structure
+        if not isinstance(data, dict):
+            raise ValueError("Multiple boards data must be a dictionary")
+        
+        if 'boards' not in data:
+            raise ValueError("Multiple boards data missing 'boards' key")
+        
+        # Load the boards data
+        boards_data.update(data)
+        
+        # Set current board or default to first available
+        current_board_id = boards_data.get('current_board')
+        available_boards = boards_data.get('boards', {})
+        
+        if not available_boards:
+            console.print("[yellow]No boards found in file. Creating default board...[/]")
+            _create_default_board()
+        elif current_board_id and current_board_id in available_boards:
+            # Load the current board
+            board = available_boards[current_board_id]['columns'].copy()
+            board_name = available_boards[current_board_id]['name']
+            console.print(f"[green]✅ Loaded multiple boards format - Active: '{board_name}'[/]")
+        else:
+            # No current board set or invalid, use first available
+            first_board_id = next(iter(available_boards.keys()))
+            boards_data['current_board'] = first_board_id
+            board = available_boards[first_board_id]['columns'].copy()
+            board_name = available_boards[first_board_id]['name']
+            console.print(f"[green]✅ Loaded multiple boards format - Defaulted to: '{board_name}'[/]")
+            # Save the updated current board selection
+            save_boards_data()
+        
+        return True
+        
+    except Exception as e:
+        display_error("Failed to load multiple boards format", e)
+        return _handle_corrupted_file()
+
+def _load_single_board_format(data: Dict[str, Any]) -> bool:
+    """Load data in legacy single board format and migrate to multiple boards.
+    
+    Returns:
+        bool: True if loaded successfully, False otherwise
+    """
+    global board, boards_data
+    
+    try:
+        # Validate single board structure
+        is_valid, error_msg = validate_json_structure(data)
+        if not is_valid:
+            raise ValueError(f"Invalid single board structure: {error_msg}")
+        
+        # Load the legacy board data
+        for column in board:
+            board[column] = data.get(column, [])
+        
+        # Ask user if they want to migrate to multiple boards
+        console.print("[yellow]📄 Detected single-board format (legacy)[/]")
+        console.print("[dim]Would you like to upgrade to multiple boards format?[/]")
+        console.print("[dim]This allows you to create and manage multiple project boards.[/]")
+        
+        migrate = Prompt.ask(
+            "[bold cyan]Upgrade to multiple boards? (Y/n)[/]",
+            default="Y"
+        )
+        
+        if migrate.lower() in ['y', 'yes', '']:
+            # Create multiple boards format with current board as "Main Board"
+            board_id = str(uuid.uuid4())
+            now_iso = datetime.now().isoformat()
+            
+            # Migrate current board to multiple boards format
+            boards_data['format_version'] = '2.0'
+            boards_data['current_board'] = board_id
+            boards_data['boards'] = {
+                board_id: {
+                    'name': 'Main Board',
+                    'created_at': now_iso,
+                    'last_modified': now_iso,
+                    'columns': board.copy()
+                }
+            }
+            
+            # Save in new format
+            if save_boards_data():
+                console.print("[green]✅ Successfully upgraded to multiple boards format![/]")
+                console.print("[dim]Your existing tasks are now in 'Main Board'[/]")
+                console.print("[dim]You can create additional boards from the main menu[/]")
+            else:
+                console.print("[yellow]⚠️ Upgraded in memory but could not save new format[/]")
+        else:
+            console.print("[yellow]Continuing with single-board mode[/]")
+        
+        console.print("[green]✅ Board loaded successfully[/]")
+        return True
+        
+    except Exception as e:
+        display_error("Failed to load single board format", e)
+        return _handle_corrupted_file()
+
+def _create_default_board() -> None:
+    """Create a default board when none exist."""
+    global board, boards_data
+    
+    board_id = str(uuid.uuid4())
+    now_iso = datetime.now().isoformat()
+    
+    # Create default board
+    boards_data['format_version'] = '2.0'
+    boards_data['current_board'] = board_id
+    boards_data['boards'] = {
+        board_id: {
+            'name': 'My First Board',
+            'created_at': now_iso,
+            'last_modified': now_iso,
+            'columns': {
+                'To Do': [],
+                'In Progress': [],
+                'Done': []
+            }
+        }
+    }
+    
+    board = boards_data['boards'][board_id]['columns'].copy()
+    console.print("[green]✅ Created default board 'My First Board'[/]")
 
 def _handle_corrupted_file() -> bool:
     """Handle corrupted data file by backing it up and starting fresh.
@@ -1439,6 +1642,502 @@ def compute_board_statistics() -> Dict[str, Any]:
 
 #endregion
 
+#region Board Management
+# ------------------------------
+# Board Management
+# ------------------------------
+
+def get_current_board_name() -> str:
+    """Get the name of the currently active board."""
+    current_id = boards_data.get('current_board')
+    if current_id and current_id in boards_data.get('boards', {}):
+        return boards_data['boards'][current_id]['name']
+    return "Default Board"
+
+def create_board():
+    """Create a new board with validation."""
+    console.print("\n[bold green]✨ Create New Board[/]")
+    console.print("[dim]Enter details for your new board.[/dim]\n")
+    
+    # Get board name
+    board_name = None
+    for attempt in range(5):
+        name_input = Prompt.ask("[bold green]Board name[/]")
+        is_valid, error_msg = validate_board_name(name_input)
+        if is_valid:
+            # Check for duplicate names
+            name_exists = any(
+                board['name'].lower() == name_input.strip().lower() 
+                for board in boards_data.get('boards', {}).values()
+            )
+            if name_exists:
+                console.print("[red]⚠️ A board with this name already exists[/]")
+                if attempt < 4:
+                    console.print(f"[dim]Please try again ({attempt + 1}/5 attempts used)[/]")
+                continue
+            
+            board_name = name_input.strip()
+            break
+        else:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+            if attempt < 4:
+                console.print(f"[dim]Please try again ({attempt + 1}/5 attempts used)[/]")
+    
+    if not board_name:
+        console.print("[red]❌ Too many invalid attempts. Returning to main menu.[/]")
+        return
+    
+    # Create the new board
+    board_id = str(uuid.uuid4())
+    now_iso = datetime.now().isoformat()
+    
+    new_board = {
+        "name": board_name,
+        "created_at": now_iso,
+        "last_modified": now_iso,
+        "columns": {
+            "To Do": [],
+            "In Progress": [],
+            "Done": []
+        }
+    }
+    
+    # Add to boards data
+    if 'boards' not in boards_data:
+        boards_data['boards'] = {}
+    
+    boards_data['boards'][board_id] = new_board
+    
+    # Show preview
+    console.print(f"\n[bold cyan]📋 New Board Preview:[/]")
+    console.print(f"  Name: [yellow]{board_name}[/]")
+    console.print(f"  Created: [dim]{datetime.fromisoformat(now_iso).strftime('%Y-%m-%d %H:%M')}[/]")
+    
+    # Confirm creation
+    confirm = Prompt.ask("\n[bold]Create this board? (Y/n)[/]", default="Y")
+    
+    if confirm.lower() in ['y', 'yes', '']:
+        if save_boards_data():
+            console.print(f"\n[green]✅ Board '{board_name}' created successfully![/]")
+            
+            # Ask if user wants to switch to the new board
+            switch = Prompt.ask("[bold cyan]Switch to this board now? (Y/n)[/]", default="Y")
+            if switch.lower() in ['y', 'yes', '']:
+                switch_to_board(board_id)
+        else:
+            # Remove the board from memory if save failed
+            if board_id in boards_data.get('boards', {}):
+                del boards_data['boards'][board_id]
+            console.print(f"\n[yellow]⚠️ Board created in memory but could not save to file[/]")
+    else:
+        # Remove the board from memory if cancelled
+        if board_id in boards_data.get('boards', {}):
+            del boards_data['boards'][board_id]
+        console.print("\n[yellow]❌ Board creation cancelled.[/]")
+
+def list_boards():
+    """Display all available boards."""
+    console.clear()
+    console.rule("[bold blue]📋 ALL BOARDS[/]")
+    
+    boards = boards_data.get('boards', {})
+    current_board_id = boards_data.get('current_board')
+    
+    if not boards:
+        console.print("\n[yellow]No boards found. Using default single-board mode.[/]")
+        console.print("[dim]Create a new board to start using multiple boards.[/]")
+        return
+    
+    # Create boards table
+    table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Name", style="yellow", min_width=20)
+    table.add_column("Tasks", style="cyan", width=8)
+    table.add_column("Created", style="dim", width=12)
+    table.add_column("Last Modified", style="dim", width=12)
+    table.add_column("Status", style="bold", width=10)
+    
+    board_list = list(boards.items())
+    for i, (board_id, board_info) in enumerate(board_list, 1):
+        # Count tasks in this board
+        task_count = sum(len(tasks) for tasks in board_info['columns'].values())
+        
+        # Format dates
+        try:
+            created = datetime.fromisoformat(board_info['created_at']).strftime('%m/%d/%Y')
+        except ValueError:
+            created = "Unknown"
+        
+        try:
+            modified = datetime.fromisoformat(board_info['last_modified']).strftime('%m/%d/%Y')
+        except ValueError:
+            modified = "Unknown"
+        
+        # Status indicator
+        status = "[green]● Active[/]" if board_id == current_board_id else "[dim]○ Inactive[/]"
+        
+        table.add_row(
+            str(i),
+            board_info['name'],
+            str(task_count),
+            created,
+            modified,
+            status
+        )
+    
+    console.print(table)
+    
+    # Show current board info
+    if current_board_id and current_board_id in boards:
+        current_name = boards[current_board_id]['name']
+        console.print(f"\n[bold green]Currently active:[/] {current_name}")
+    else:
+        console.print("\n[yellow]No active board (using default mode)[/]")
+    
+    total_boards = len(boards)
+    total_tasks = sum(
+        sum(len(tasks) for tasks in board_info['columns'].values())
+        for board_info in boards.values()
+    )
+    console.print(f"[dim]Total: {total_boards} board(s) with {total_tasks} task(s)[/]")
+
+def switch_board():
+    """Switch to a different board."""
+    boards = boards_data.get('boards', {})
+    
+    if not boards:
+        console.print("\n[yellow]No boards available. Create a board first.[/]")
+        return
+    
+    if len(boards) == 1:
+        console.print("\n[yellow]Only one board exists. No switching needed.[/]")
+        return
+    
+    console.print("\n[bold cyan]🔄 Switch Board[/]")
+    console.print("[dim]Select a board to switch to:[/dim]\n")
+    
+    # Display board choices
+    board_list = list(boards.items())
+    current_board_id = boards_data.get('current_board')
+    
+    for i, (board_id, board_info) in enumerate(board_list, 1):
+        task_count = sum(len(tasks) for tasks in board_info['columns'].values())
+        status = " [green](current)[/]" if board_id == current_board_id else ""
+        console.print(f"  [cyan]{i}.[/] {board_info['name']} [dim]({task_count} tasks)[/]{status}")
+    
+    # Get user choice
+    while True:
+        try:
+            choice = Prompt.ask(f"[bold]Enter board number (1-{len(board_list)})[/]")
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(board_list):
+                selected_board_id = board_list[choice_num - 1][0]
+                selected_board_name = board_list[choice_num - 1][1]['name']
+                
+                if selected_board_id == current_board_id:
+                    console.print(f"[yellow]You're already on '{selected_board_name}'[/]")
+                    return
+                
+                switch_to_board(selected_board_id)
+                return
+            else:
+                console.print(f"[red]Please enter a number between 1 and {len(board_list)}[/]")
+        except ValueError:
+            console.print("[red]Please enter a valid number[/]")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Board switching cancelled.[/]")
+            return
+
+def switch_to_board(board_id: str):
+    """Switch to a specific board by ID."""
+    global board, boards_data
+    
+    boards = boards_data.get('boards', {})
+    if board_id not in boards:
+        console.print(f"[red]❌ Board with ID {board_id} not found[/]")
+        return False
+    
+    # Save current board state if we're switching from a multi-board setup
+    current_board_id = boards_data.get('current_board')
+    if current_board_id and current_board_id in boards:
+        # Update the current board's data and last_modified timestamp
+        boards[current_board_id]['columns'] = board.copy()
+        boards[current_board_id]['last_modified'] = datetime.now().isoformat()
+    
+    # Switch to the new board
+    boards_data['current_board'] = board_id
+    board = boards[board_id]['columns'].copy()
+    boards[board_id]['last_modified'] = datetime.now().isoformat()
+    
+    # Save the updated state
+    if save_boards_data():
+        board_name = boards[board_id]['name']
+        console.print(f"[green]✅ Switched to board '{board_name}'[/]")
+        return True
+    else:
+        console.print(f"[yellow]⚠️ Switched to board but could not save state[/]")
+        return False
+
+def delete_board():
+    """Delete a board with confirmation."""
+    boards = boards_data.get('boards', {})
+    
+    if not boards:
+        console.print("\n[yellow]No boards available to delete.[/]")
+        return
+    
+    if len(boards) == 1:
+        console.print("\n[yellow]Cannot delete the only remaining board.[/]")
+        return
+    
+    console.print("\n[bold red]🗑️ Delete Board[/]")
+    console.print("[dim]Select a board to delete:[/dim]\n")
+    
+    # Display board choices (excluding current board to prevent accidental deletion)
+    board_list = list(boards.items())
+    current_board_id = boards_data.get('current_board')
+    deletable_boards = [(bid, binfo) for bid, binfo in board_list if bid != current_board_id]
+    
+    if not deletable_boards:
+        console.print("[yellow]No other boards available to delete. You can't delete the current active board.[/]")
+        console.print("[dim]Switch to a different board first if you want to delete the current one.[/]")
+        return
+    
+    for i, (board_id, board_info) in enumerate(deletable_boards, 1):
+        task_count = sum(len(tasks) for tasks in board_info['columns'].values())
+        console.print(f"  [red]{i}.[/] {board_info['name']} [dim]({task_count} tasks)[/]")
+    
+    # Get user choice
+    while True:
+        try:
+            choice = Prompt.ask(f"[bold red]Enter board number to delete (1-{len(deletable_boards)})[/]")
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(deletable_boards):
+                selected_board_id = deletable_boards[choice_num - 1][0]
+                selected_board_info = deletable_boards[choice_num - 1][1]
+                break
+            else:
+                console.print(f"[red]Please enter a number between 1 and {len(deletable_boards)}[/]")
+        except ValueError:
+            console.print("[red]Please enter a valid number[/]")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Board deletion cancelled.[/]")
+            return
+    
+    board_name = selected_board_info['name']
+    task_count = sum(len(tasks) for tasks in selected_board_info['columns'].values())
+    
+    # Show warning and confirm
+    console.print(f"\n[bold red]⚠️ WARNING:[/] You are about to delete '[yellow]{board_name}[/]'")
+    if task_count > 0:
+        console.print(f"[red]This board contains {task_count} task(s) that will be permanently lost![/]")
+    console.print("[dim]This action cannot be undone.[/]")
+    
+    confirmation = Prompt.ask(
+        f"\n[bold red]Type the board name exactly to confirm deletion:[/]"
+    )
+    
+    if confirmation == board_name:
+        # Delete the board
+        del boards_data['boards'][selected_board_id]
+        
+        if save_boards_data():
+            console.print(f"\n[bold red]🗑️ Board '{board_name}' and all its tasks deleted permanently.[/]")
+        else:
+            console.print(f"\n[yellow]⚠️ Board deleted from memory but could not save to file[/]")
+    else:
+        console.print("\n[yellow]❌ Board name doesn't match. Deletion cancelled.[/]")
+
+def rename_board():
+    """Rename the current board."""
+    current_board_id = boards_data.get('current_board')
+    boards = boards_data.get('boards', {})
+    
+    if not current_board_id or current_board_id not in boards:
+        console.print("\n[yellow]No active board to rename. You're in single-board mode.[/]")
+        return
+    
+    current_board = boards[current_board_id]
+    current_name = current_board['name']
+    
+    console.print(f"\n[bold blue]✏️ Rename Board[/]")
+    console.print(f"[dim]Current name: {current_name}[/dim]\n")
+    
+    # Get new board name
+    new_name = None
+    for attempt in range(3):
+        name_input = Prompt.ask("[bold blue]New board name[/]", default=current_name)
+        
+        if name_input.strip() == current_name:
+            console.print("[yellow]Name unchanged.[/]")
+            return
+        
+        is_valid, error_msg = validate_board_name(name_input)
+        if is_valid:
+            # Check for duplicate names
+            name_exists = any(
+                board_id != current_board_id and 
+                board['name'].lower() == name_input.strip().lower() 
+                for board_id, board in boards.items()
+            )
+            if name_exists:
+                console.print("[red]⚠️ A board with this name already exists[/]")
+                if attempt < 2:
+                    console.print(f"[dim]Please try again ({attempt + 1}/3 attempts used)[/]")
+                continue
+            
+            new_name = name_input.strip()
+            break
+        else:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+            if attempt < 2:
+                console.print(f"[dim]Please try again ({attempt + 1}/3 attempts used)[/]")
+    
+    if not new_name:
+        console.print("[red]❌ Too many invalid attempts. Board not renamed.[/]")
+        return
+    
+    # Update the board name and last modified timestamp
+    current_board['name'] = new_name
+    current_board['last_modified'] = datetime.now().isoformat()
+    
+    if save_boards_data():
+        console.print(f"\n[green]✅ Board renamed from '{current_name}' to '{new_name}'[/]")
+    else:
+        # Revert the change if save failed
+        current_board['name'] = current_name
+        console.print(f"\n[yellow]⚠️ Board renamed in memory but could not save to file[/]")
+
+def board_management_menu():
+    """Display board management submenu."""
+    if not boards_data.get('boards'):
+        console.print("\n[yellow]📋 No multiple boards configured. You're in single-board mode.[/]")
+        console.print("[dim]Create your first board to start using multiple boards.[/dim]")
+        
+        # Offer to create first board
+        create_first = Prompt.ask("[bold cyan]Create your first board now? (Y/n)[/]", default="Y")
+        if create_first.lower() in ['y', 'yes', '']:
+            create_board()
+        return
+    
+    while True:
+        try:
+            current_board_name = get_current_board_name()
+            boards_count = len(boards_data.get('boards', {}))
+            
+            console.print(Panel.fit(
+                "[bold green]1.[/] Create New Board\n"
+                "[bold cyan]2.[/] List All Boards\n"
+                "[bold blue]3.[/] Switch Board\n"
+                "[bold yellow]4.[/] Rename Current Board\n"
+                "[bold red]5.[/] Delete Board\n"
+                "[bold magenta]6.[/] Back to Main Menu",
+                title="[bold blue]📋 BOARD MANAGEMENT",
+                subtitle=f"[dim]Active: [yellow]{current_board_name}[/yellow] • {boards_count} total boards[/dim]"
+            ))
+            
+            board_choice = Prompt.ask("[bold]Enter choice (1-6)[/]")
+            
+            if board_choice == '1':
+                create_board()
+            elif board_choice == '2':
+                list_boards()
+                input("\n[dim]Press Enter to continue...[/dim]")
+            elif board_choice == '3':
+                switch_board()
+            elif board_choice == '4':
+                rename_board()
+            elif board_choice == '5':
+                delete_board()
+            elif board_choice == '6':
+                break
+            else:
+                console.print("[red]⚠️ Please enter a number between 1 and 6[/]")
+                
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Returning to main menu...[/]")
+            break
+        except Exception as e:
+            display_error("Unexpected error in board management menu", e)
+            console.print("[yellow]Continuing...[/]")
+
+def save_boards_data() -> bool:
+    """Save the boards data structure to file with atomic writes and error handling.
+    
+    Returns:
+        bool: True if saved successfully, False if save failed
+    """
+    # If we're in single-board mode (no boards_data.boards), use legacy save
+    if not boards_data.get('boards'):
+        return save_board()
+    
+    max_retries = 3
+    retry_delay = 0.1  # Start with 100ms delay
+    
+    for attempt in range(max_retries):
+        try:
+            # Use atomic write: write to temp file, then replace original
+            temp_dir = os.path.dirname(os.path.abspath(DATA_FILE))
+            
+            with tempfile.NamedTemporaryFile(mode='w', dir=temp_dir, 
+                                             suffix='.tmp', delete=False, 
+                                             encoding='utf-8') as temp_file:
+                json.dump(boards_data, temp_file, indent=2, ensure_ascii=False)
+                temp_file_path = temp_file.name
+            
+            # Atomic replace operation
+            if os.name == 'nt':  # Windows
+                # On Windows, we need to remove the target first
+                if os.path.exists(DATA_FILE):
+                    os.replace(temp_file_path, DATA_FILE)
+                else:
+                    os.rename(temp_file_path, DATA_FILE)
+            else:  # Unix-like systems
+                os.replace(temp_file_path, DATA_FILE)
+            
+            if attempt > 0:
+                console.print(f"[green]✅ Data saved successfully (attempt {attempt + 1})[/]")
+            
+            return True
+            
+        except PermissionError as e:
+            if attempt < max_retries - 1:
+                console.print(f"[yellow]⚠️ Save failed, retrying in {retry_delay:.1f}s... (attempt {attempt + 1}/{max_retries})[/]")
+                import time
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                display_error(f"Permission denied saving to {DATA_FILE}", e)
+                console.print("[red]💾 Your changes are NOT saved! Please check file permissions.[/]")
+        
+        except OSError as e:
+            if "No space left on device" in str(e) or "disk full" in str(e).lower():
+                display_error("Cannot save: disk is full", e)
+                break  # No point retrying if disk is full
+            elif attempt < max_retries - 1:
+                console.print(f"[yellow]⚠️ Save failed, retrying in {retry_delay:.1f}s... (attempt {attempt + 1}/{max_retries})[/]")
+                import time
+                time.sleep(retry_delay)
+                retry_delay *= 2
+            else:
+                display_error(f"System error saving {DATA_FILE}", e)
+        
+        except Exception as e:
+            display_error(f"Unexpected error saving {DATA_FILE}", e)
+            break  # Don't retry on unexpected errors
+        
+        finally:
+            # Clean up temp file if it still exists
+            try:
+                if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+            except OSError:
+                pass  # Ignore cleanup errors
+    
+    return False
+
+#endregion
+
 #region Help System
 # ------------------------------
 # Help System
@@ -1487,7 +2186,9 @@ def show_keyboard_shortcuts_help():
         "• [cyan]Auto-save:[/] Changes are automatically saved to disk\n"
         "• [cyan]Backup Recovery:[/] Corrupted files are automatically backed up\n"
         "• [cyan]Rich Formatting:[/] Colored priority indicators and due date warnings\n"
-        "• [cyan]Enhanced Tasks:[/] Support for descriptions, priorities, due dates, and tags",
+        "• [cyan]Enhanced Tasks:[/] Support for descriptions, priorities, due dates, and tags\n"
+        "• [cyan]Multiple Boards:[/] Create and manage separate project boards\n"
+        "• [cyan]Auto-migration:[/] Legacy single-board data automatically upgraded",
         title="[bold green]🌟 Features",
         border_style="green"
     )
@@ -1505,6 +2206,19 @@ def show_keyboard_shortcuts_help():
         border_style="yellow"
     )
     console.print(task_help_panel)
+    
+    # Board management help
+    board_help_panel = Panel.fit(
+        "• [blue]Multiple Boards:[/] Create separate boards for different projects\n"
+        "• [blue]Board Switching:[/] Switch between boards with 'b' shortcut\n"
+        "• [blue]Auto-save State:[/] Current board and changes are saved automatically\n"
+        "• [blue]Migration Support:[/] Legacy single-board data seamlessly upgraded\n"
+        "• [blue]Board Operations:[/] Create, rename, delete, list all available boards\n"
+        "• [blue]Safe Deletion:[/] Cannot delete current active board by accident",
+        title="[bold blue]📋 Multiple Boards",
+        border_style="blue"
+    )
+    console.print(board_help_panel)
     
     # Error recovery help
     recovery_panel = Panel.fit(
@@ -1536,6 +2250,15 @@ def main_menu():
     
     while True:
         try:
+            # Show current board info
+            current_board_name = get_current_board_name()
+            boards_count = len(boards_data.get('boards', {}))
+            
+            if boards_count > 0:
+                board_info = f"[dim]Active Board: [yellow]{current_board_name}[/yellow] ({boards_count} total)[/dim]"
+            else:
+                board_info = "[dim]Single Board Mode[/dim]"
+            
             console.print(Panel.fit(
                 "[bold cyan]1.[/] View Board         [dim]([cyan]v[/])[/]\n"
                 "[bold cyan]2.[/] Add Task          [dim]([cyan]a[/])[/]\n"
@@ -1544,9 +2267,10 @@ def main_menu():
                 "[bold cyan]5.[/] Delete Task       [dim]([cyan]d[/])[/]\n"
                 "[bold cyan]6.[/] Search & Filter   [dim]([cyan]s[/])[/]\n"
                 "[bold cyan]7.[/] View Statistics    [dim]([cyan]r[/])[/]\n"
-                "[bold cyan]8.[/] Exit              [dim]([cyan]q[/])[/]",
+                "[bold cyan]8.[/] Board Management  [dim]([cyan]b[/])[/]\n"
+                "[bold cyan]9.[/] Exit              [dim]([cyan]q[/])[/]",
                 title="[bold magenta]ENHANCED KANBAN MENU",
-                subtitle="Enter number or shortcut key • [dim cyan]h[/dim cyan] for help"
+                subtitle=f"{board_info}\nEnter number or shortcut key • [dim cyan]h[/dim cyan] for help"
             ))
 
             max_attempts = 3
@@ -1554,7 +2278,7 @@ def main_menu():
             
             for attempt in range(max_attempts):
                 try:
-                    raw_choice = Prompt.ask("[bold]Enter choice (1-8)[/]")
+                    raw_choice = Prompt.ask("[bold]Enter choice (1-9)[/]")
                     is_valid, error_msg = validate_menu_choice(raw_choice)
                     
                     if is_valid:
@@ -1605,6 +2329,8 @@ def main_menu():
                 view_statistics()
                 input("\n[dim]Press Enter to continue...[/dim]")
             elif choice == '8':
+                board_management_menu()
+            elif choice == '9':
                 console.print("[bold yellow]👋 Exiting Enhanced Kanban Board. Goodbye![/]")
                 break
                 
