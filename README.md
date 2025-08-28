@@ -1,11 +1,28 @@
 # 📋 Enhanced Python Kanban Board
 
-A feature-rich, terminal-based Kanban board application written in Python with enterprise-level error handling, enhanced task management, and comprehensive analytics.
+A feature-rich, terminal-based Kanban board application written in Python with enterprise-level error handling, enhanced task management, comprehensive analytics, and full project organization capabilities.
 
 ![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Rich](https://img.shields.io/badge/UI-Rich-purple.svg)
 ![Features](https://img.shields.io/badge/features-enhanced-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.0-blue.svg)
+![Boards](https://img.shields.io/badge/boards-multiple-green.svg)
+
+## 🆕 Recent Updates (August 2025)
+
+Major feature updates have been implemented to enhance productivity and project management:
+
+### 🆕 **Version 2.0 Features**
+- ✨ **Multiple Boards Support**: Create separate boards for different projects
+- ✅ **Subtasks System**: Break down complex tasks into manageable subtasks with progress tracking
+- ⌨️ **Keyboard Shortcuts**: Single-key shortcuts for all major functions (`v`, `a`, `e`, `m`, `d`, `s`, `r`, `b`, `q`)
+- 🔍 **Advanced Search & Filter**: Multi-criteria filtering by title, description, priority, tags, due dates
+- 📈 **Statistics Dashboard**: Comprehensive analytics with priority breakdown, overdue tracking, tag usage
+- 🔧 **Automatic Migration**: Legacy single-board data automatically upgrades to new format
+- 🎨 **Enhanced UI**: Richer task display with priority indicators, due date warnings, tag visualization
+
+All existing functionality remains fully compatible with automatic data migration.
 
 ## ✨ Features
 
@@ -15,9 +32,31 @@ A feature-rich, terminal-based Kanban board application written in Python with e
 - **🔴🟡🟢 Priority System**: Visual priority indicators with color coding
 - **📅 Due Date Tracking**: Smart due date display with overdue warnings
 - **🏷️ Tagging System**: Organize tasks with customizable tags
+- **✅ Subtask Support**: Break down tasks into manageable subtasks with progress tracking
 - **✏️ In-Place Editing**: Edit any task field after creation
+- **🔍 Advanced Search & Filter**: Filter tasks by title, description, priority, tags, due dates
+- **📈 Statistics & Analytics**: Comprehensive board statistics and progress insights
 - **🎨 Beautiful Interface**: Rich terminal UI with colors and formatting
 - **💾 Persistent Storage**: JSON-based data persistence with auto-migration
+
+### 📋 Multiple Boards Support
+- **🗂️ Project Organization**: Create separate boards for different projects
+- **🔄 Easy Board Switching**: Seamlessly switch between multiple boards
+- **📛 Board Management**: Create, rename, delete, and organize boards
+- **🔧 Automatic Migration**: Legacy single-board data automatically upgrades
+- **💾 Unified Storage**: All boards stored in single file with proper isolation
+
+### ⌨️ Keyboard Shortcuts
+- **🚀 Quick Navigation**: Single-key shortcuts for all major functions
+- **📋 View Board**: Press `v` to display current board
+- **➕ Add Task**: Press `a` to create new task
+- **✏️ Edit Task**: Press `e` to edit existing task
+- **🔄 Move Task**: Press `m` to move task between columns
+- **🗑️ Delete Task**: Press `d` to delete task
+- **🔍 Search**: Press `s` to search and filter tasks
+- **📊 Statistics**: Press `r` for board analytics and reports
+- **🗂️ Board Management**: Press `b` to manage multiple boards
+- **❓ Help**: Press `h` or `?` for help and shortcuts reference
 
 ### 🛡️ Enterprise-Grade Reliability
 - **🔒 Atomic File Operations**: Prevents data corruption during saves
@@ -60,30 +99,156 @@ A feature-rich, terminal-based Kanban board application written in Python with e
 ## 📖 Usage
 
 ### Main Menu Options
-1. **View Board** - Display current state of all tasks
-2. **Add Task** - Create new task in "To Do" column
-3. **Move Task** - Move task between columns using task ID
-4. **Delete Task** - Remove task from board (with confirmation)
-5. **Exit** - Save and quit the application
+1. **View Board** (`v`) - Display current state of all tasks with rich formatting
+2. **Add Task** (`a`) - Create new enhanced task with properties like priority, due dates, tags
+3. **Edit Task** (`e`) - Edit any existing task properties including subtasks
+4. **Move Task** (`m`) - Move task between columns using task ID
+5. **Delete Task** (`d`) - Remove task from board (with confirmation)
+6. **Search & Filter** (`s`) - Advanced search and filtering capabilities
+7. **View Statistics** (`r`) - Comprehensive board analytics and reports
+8. **Board Management** (`b`) - Create, switch, rename, and delete boards
+9. **Exit** (`q`) - Save and quit the application
+
+### Keyboard Shortcuts
+For faster navigation, you can use single-key shortcuts instead of menu numbers:
+- Press the letter in parentheses next to each menu option
+- Press `h` or `?` for help and shortcuts reference
+- All shortcuts work from the main menu
 
 ### Task Identification
 - Each task has a unique ID displayed as first 4 characters (e.g., `abc1`)
 - Enter these 4 characters to identify tasks for moving/deleting
 - System prevents ambiguous matches and asks for more characters if needed
 
-### Example Workflow
+### Enhanced Task Creation
+When adding a new task, you'll be prompted for comprehensive details:
 ```
-📋 KANBAN BOARD
-┌─────────────┬─────────────┬──────────────┐
-│ To Do       │ In Progress │ Done         │
-├─────────────┼─────────────┼──────────────┤
-│ Fix bug     │ Review PR   │ Deploy v1.0  │
-│ (a1b2)      │ (c3d4)      │ (e5f6)       │
-└─────────────┴─────────────┴──────────────┘
+✨ Create New Task
+* Task title: Implement user authentication
+Description (optional): Add login/logout functionality with JWT tokens
+Priority (high/medium/low): high
+Due date (YYYY-MM-DD, optional): 2025-09-15
+Tags (comma-separated, optional): security, backend, auth
 
-# Move task from "To Do" to "In Progress"
+📋 Task Preview:
+  Title: Implement user authentication
+  Priority: 🔴 High
+  Description: Add login/logout functionality with JWT tokens
+  Due: 📅 Due 2025-09-15
+  Tags: #security, #backend, #auth
+  
+Add this task? (Y/n): Y
+✅ Task 'Implement user authentication' added to To Do!
+```
+
+### Subtasks Management
+Break down complex tasks into manageable subtasks:
+```
+# When editing a task, you can manage subtasks:
+📝 Editing Task: Implement user authentication
+
+EDIT TASK MENU:
+7. Manage Subtasks
+
+# Add subtasks:
+➕ Add Subtask: Set up JWT library
+➕ Add Subtask: Create login endpoint
+➕ Add Subtask: Create logout endpoint  
+➕ Add Subtask: Add authentication middleware
+
+# View progress:
+📋 Subtasks Progress: 2/4 completed (50%)
+✅ Set up JWT library
+✅ Create login endpoint
+⏳ Create logout endpoint
+⏳ Add authentication middleware
+```
+
+### Multiple Boards Workflow
+Organize different projects with separate boards:
+```
+🗂️ Board Management:
+1. Create New Board
+2. List All Boards
+3. Switch Board
+
+# Create a new board:
+Board name: Mobile App Project
+✅ Board 'Mobile App Project' created successfully!
+Switch to this board now? (Y/n): Y
+✅ Switched to board 'Mobile App Project'
+
+# Switch between boards:
+🔄 Switch Board
+1. Web Dashboard (5 tasks) (current)
+2. Mobile App Project (0 tasks)
+3. DevOps Infrastructure (12 tasks)
+
+Enter board number (1-3): 2
+✅ Switched to board 'Mobile App Project'
+```
+
+### Advanced Search & Filtering
+Find tasks quickly with powerful search capabilities:
+```
+🔍 Search & Filter Tasks
+Search in title (optional): authentication
+Search in description (optional): JWT
+Filter by priority (high/medium/low, optional): high
+Filter by column (optional): To Do
+Search in tags (optional): security
+Due date filter (overdue/today/upcoming, optional): upcoming
+
+🔍 Search Results: 2 task(s) found
+┏━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
+┃ ID     ┃ Title   ┃ Column ┃
+┣━━━━━━━━╋━━━━━━━━╋━━━━━━━━┫
+┃ a1b2c3d4 ┃ Implement user auth ┃ To Do  ┃
+┃ e5f6g7h8 ┃ JWT token validation ┃ To Do  ┃
+┗━━━━━━━━┻━━━━━━━━┻━━━━━━━━┛
+```
+
+### Board Statistics
+Get insights into your project progress:
+```
+📊 BOARD STATISTICS
+
+📈 Overview        🎨 Priority Breakdown
+Total Tasks: 15      🔴 High Priority: 4
+To Do: 8            🟡 Medium Priority: 7  
+In Progress: 4       🟢 Low Priority: 4
+Done: 3
+                    📅 Due Date Status
+🏷️ Top Tags           ⏰ Overdue: 2
+#backend: 6 tasks    ⏳ Due Today: 1
+#frontend: 4 tasks   📅 Upcoming: 5
+#security: 3 tasks   No Due Date: 7
+#testing: 2 tasks
+
+⚠️ OVERDUE TASKS
+a1b2 - Fix critical security vulnerability
+c3d4 - Update user documentation
+```
+
+### Basic Example Workflow
+```
+📋 KANBAN BOARD - Web Dashboard
+┌─────────────────────────┬─────────────────────────┬─────────────────────────┐
+│ To Do                   │ In Progress             │ Done                    │
+├─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ 🔴 Fix authentication bug │ 🟡 Review PR #123       │ 🟢 Deploy v2.1.0        │
+│ (a1b2)                  │ (c3d4)                  │ (e5f6)                  │
+│ ⏰ Overdue (2d)            │ #frontend #review       │ Subtasks: 3/3 (100%)    │
+│ #security #critical     │                         │ 📅 Completed 08/25      │
+└─────────────────────────┴─────────────────────────┴─────────────────────────┘
+
+# Quick actions with keyboard shortcuts:
+Press 'v' to view board, 'a' to add task, 'm' to move task
+Press 's' to search, 'r' for statistics, 'b' for board management
+
+# Move task with ID:
 Enter task ID: a1b2
-Move to: In Progress
+Move to: In Progress  
 ✅ Task moved successfully!
 ```
 
@@ -103,8 +268,13 @@ Move to: In Progress
 
 ### Input Validation
 - **Task Titles**: 1-100 characters, no control characters
+- **Subtask Titles**: 1-80 characters, no control characters
 - **Task IDs**: Minimum 4 characters, alphanumeric with hyphens
-- **Menu Choices**: Must be valid numbers 1-5
+- **Menu Choices**: Must be valid numbers 1-9 or keyboard shortcuts
+- **Priority Levels**: Must be 'high', 'medium', or 'low'
+- **Due Dates**: Must be valid ISO format (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
+- **Tags**: Alphanumeric with hyphens/underscores, max 20 characters each
+- **Board Names**: 1-50 characters, no invalid filename characters
 - **Duplicate Prevention**: Unique 4-character ID prefixes guaranteed
 - **Multiple Attempts**: Allows correction of invalid inputs
 
@@ -141,11 +311,58 @@ copy kanban_data.json.bak_corrupt_TIMESTAMP kanban_data.json
 ## 🎯 Technical Details
 
 ### Dependencies
-- **Rich**: Terminal UI framework for beautiful displays
+- **Rich**: Terminal UI framework for beautiful displays and UI components
 - **Standard Library**: json, os, uuid, tempfile, shutil, datetime, typing
 
-### Data Format
-Tasks are stored in JSON format:
+### Enhanced Data Format
+
+#### Multiple Boards Format (v2.0+)
+The new multiple boards format supports project organization:
+```json
+{
+  "format_version": "2.0",
+  "current_board": "board-uuid-here",
+  "boards": {
+    "board-uuid-here": {
+      "name": "Web Dashboard Project",
+      "created_at": "2025-08-28T10:30:00",
+      "last_modified": "2025-08-28T15:45:00",
+      "columns": {
+        "To Do": [
+          {
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "title": "Implement user authentication",
+            "description": "Add login/logout with JWT tokens",
+            "priority": "high",
+            "created_at": "2025-08-28T10:00:00",
+            "due_date": "2025-09-15T00:00:00",
+            "tags": ["security", "backend", "auth"],
+            "subtasks": [
+              {
+                "id": "sub12345",
+                "title": "Set up JWT library",
+                "completed": true,
+                "created_at": "2025-08-28T10:15:00"
+              },
+              {
+                "id": "sub67890",
+                "title": "Create login endpoint",
+                "completed": false,
+                "created_at": "2025-08-28T10:16:00"
+              }
+            ]
+          }
+        ],
+        "In Progress": [],
+        "Done": []
+      }
+    }
+  }
+}
+```
+
+#### Legacy Single Board Format (v1.0)
+Backward compatible with original format:
 ```json
 {
   "To Do": [
@@ -158,6 +375,83 @@ Tasks are stored in JSON format:
   "Done": []
 }
 ```
+
+### Enhanced Task Properties
+
+#### Core Fields
+- **id**: UUID4 string for unique identification
+- **title**: Task title (1-100 characters)
+- **description**: Optional detailed description
+- **priority**: "high", "medium", or "low"
+- **created_at**: ISO datetime string
+- **due_date**: Optional ISO datetime string
+- **tags**: Array of tag strings
+- **subtasks**: Array of subtask objects
+
+#### Subtask Structure
+- **id**: Short UUID for subtask identification
+- **title**: Subtask title (1-80 characters)
+- **completed**: Boolean completion status
+- **created_at**: ISO datetime string
+
+### Validation & Error Handling
+
+#### Input Validation Functions
+- `validate_title()`: Task title validation (1-100 chars, no control chars)
+- `validate_task_id()`: Task ID format validation (min 4 chars, alphanumeric + hyphens)
+- `validate_priority()`: Priority level validation (high/medium/low)
+- `validate_due_date()`: Date format validation (ISO format)
+- `validate_tags()`: Tag format validation (alphanumeric + hyphens/underscores)
+- `validate_board_name()`: Board name validation (1-50 chars, no invalid filename chars)
+- `validate_json_structure()`: Data structure integrity validation
+
+#### Enhanced Error Handling
+- **Atomic File Operations**: Prevents data corruption during saves
+- **Automatic Data Migration**: Seamlessly upgrades legacy formats
+- **Corrupted File Recovery**: Auto-backup and recovery mechanisms
+- **Graceful Degradation**: Continues operation when non-critical operations fail
+- **User-Friendly Messages**: Clear error messages without technical jargon
+- **Retry Logic**: Exponential backoff for transient failures
+
+### Keyboard Shortcut System
+
+#### Shortcut Mapping
+```python
+KEYBOARD_SHORTCUTS = {
+    '1': {'action': '1', 'desc': 'View Board', 'key': 'v'},
+    '2': {'action': '2', 'desc': 'Add Task', 'key': 'a'},
+    '3': {'action': '3', 'desc': 'Edit Task', 'key': 'e'},
+    '4': {'action': '4', 'desc': 'Move Task', 'key': 'm'},
+    '5': {'action': '5', 'desc': 'Delete Task', 'key': 'd'},
+    '6': {'action': '6', 'desc': 'Search & Filter', 'key': 's'},
+    '7': {'action': '7', 'desc': 'View Statistics', 'key': 'r'},
+    '8': {'action': '8', 'desc': 'Board Management', 'key': 'b'},
+    '9': {'action': '9', 'desc': 'Exit', 'key': 'q'}
+}
+```
+
+### Statistics & Analytics
+
+#### Computed Metrics
+- **Task Distribution**: Count by column (To Do, In Progress, Done)
+- **Priority Breakdown**: Count by priority level (High, Medium, Low)
+- **Due Date Analysis**: Overdue, due today, upcoming within 7 days
+- **Tag Usage Statistics**: Most frequently used tags with counts
+- **Completion Progress**: Overall completion percentages
+- **Overdue Task Tracking**: List of overdue tasks with details
+
+### Search & Filter System
+
+#### Filter Criteria
+- **Title Search**: Partial text matching in task titles
+- **Description Search**: Partial text matching in descriptions
+- **Priority Filter**: Exact match on priority levels
+- **Column Filter**: Tasks from specific columns
+- **Tag Search**: Partial matching in task tags
+- **Due Date Filter**: Overdue, due today, or upcoming tasks
+
+#### Multi-Criteria Filtering
+All filters work together using AND logic - tasks must match ALL specified criteria to appear in results.
 
 ### Error Handling Strategy
 - **Fail-Safe**: Application never crashes due to file or input errors
