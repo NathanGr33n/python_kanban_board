@@ -61,8 +61,9 @@ KEYBOARD_SHORTCUTS = {
     '5': {'action': '5', 'desc': 'Delete Task', 'key': 'd'},
     '6': {'action': '6', 'desc': 'Search & Filter', 'key': 's'},
     '7': {'action': '7', 'desc': 'View Statistics', 'key': 'r'},  # 'r' for reports
-    '8': {'action': '8', 'desc': 'Board Management', 'key': 'b'},
-    '9': {'action': '9', 'desc': 'Exit', 'key': 'q'},
+    '8': {'action': '8', 'desc': 'Export Reports', 'key': 'x'},
+    '9': {'action': '9', 'desc': 'Board Management', 'key': 'b'},
+    '10': {'action': '10', 'desc': 'Exit', 'key': 'q'},
     'help': {'action': 'help', 'desc': 'Show Help', 'key': 'h'}
 }
 
@@ -142,7 +143,7 @@ def validate_menu_choice(choice: str) -> Tuple[bool, str]:
     choice = choice.strip().lower()
     
     # Check if it's a valid number choice
-    if choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
+    if choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']:
         return True, ""
     
     # Check if it's a valid keyboard shortcut
@@ -151,7 +152,7 @@ def validate_menu_choice(choice: str) -> Tuple[bool, str]:
     
     # Show helpful error message with available options
     shortcuts_desc = ", ".join([f"'{info['key']}' ({info['desc']})" for info in KEYBOARD_SHORTCUTS.values()])
-    return False, f"Please enter 1-9 or use shortcuts: {shortcuts_desc}"
+    return False, f"Please enter 1-10 or use shortcuts: {shortcuts_desc}"
 
 def validate_priority(priority: str) -> Tuple[bool, str]:
     """Validate task priority input.
@@ -2146,6 +2147,767 @@ def compute_board_statistics() -> Dict[str, Any]:
 
 #endregion
 
+#region Report Generation
+# ------------------------------
+# Report Generation & Export
+# ------------------------------
+
+def generate_board_summary_report() -> Dict[str, Any]:
+    """Generate a comprehensive summary report of the current board.
+    
+    Returns:
+        Dict containing board summary data
+    """
+    current_board_name = get_current_board_name()
+    stats = compute_board_statistics()
+    now = datetime.now()
+    
+    # Calculate additional metrics
+    total_time_tracked = 0.0
+    total_estimated = 0.0
+    tasks_with_estimates = 0
+    tasks_with_time = 0
+    active_timers = 0
+    
+    for tasks in board.values():
+        for task in tasks:
+            # Time tracking metrics
+            time_spent = task.get('time_spent', 0.0)
+            if time_spent > 0:
+                total_time_tracked += time_spent
+                tasks_with_time += 1
+            
+            estimated = task.get('estimated_hours')
+            if estimated:
+                total_estimated += estimated
+                tasks_with_estimates += 1
+            
+            if task.get('start_time'):
+                active_timers += 1
+    
+    report = {
+        "report_type": "board_summary",
+        "generated_at": now.isoformat(),
+        "board_info": {
+            "name": current_board_name,
+            "total_tasks": stats['total_tasks']
+        },
+        "task_distribution": stats['by_column'],
+        "priority_breakdown": stats['by_priority'],
+        "due_date_status": stats['due_stats'],
+        "time_tracking": {
+            "total_hours_tracked": round(total_time_tracked, 2),
+            "total_hours_estimated": round(total_estimated, 2),
+            "tasks_with_time_data": tasks_with_time,
+            "tasks_with_estimates": tasks_with_estimates,
+            "active_timers": active_timers,
+            "completion_ratio": round((total_time_tracked / total_estimated * 100) if total_estimated > 0 else 0, 1)
+        },
+        "top_tags": dict(stats['tag_usage'][:10]),  # Top 10 tags
+        "overdue_count": len(stats['overdue_tasks'])
+    }
+    
+    return report
+
+def generate_detailed_tasks_report(include_time_entries: bool = True) -> Dict[str, Any]:
+    """Generate a detailed report of all tasks with complete information.
+    
+    Args:
+        include_time_entries: Whether to include full time entry details
+    
+    Returns:
+        Dict containing detailed task data
+    """
+    now = datetime.now()
+    current_board_name = get_current_board_name()
+    
+    tasks_data = []
+    
+    for col_name, tasks in board.items():
+        for task in tasks:
+            # Calculate task metrics
+            time_spent = task.get('time_spent', 0.0)
+            estimated = task.get('estimated_hours')
+            progress_percentage = (time_spent / estimated * 100) if estimated and estimated > 0 else None
+            
+            # Timer status
+            timer_duration = get_timer_duration(task)
+            timer_status = {
+                "is_running": timer_duration is not None,
+                "current_duration_hours": round(timer_duration, 3) if timer_duration else None
+            }
+            
+            # Due date analysis
+            due_date_str = task.get('due_date')
+            due_analysis = None
+            if due_date_str:
+                try:
+                    due_date = datetime.fromisoformat(due_date_str)
+                    days_until_due = (due_date - now).days
+                    due_analysis = {
+                        "due_date": due_date_str,
+                        "days_until_due": days_until_due,
+                        "is_overdue": days_until_due < 0,
+                        "urgency_level": "overdue" if days_until_due < 0 else "today" if days_until_due == 0 else "soon" if days_until_due <= 3 else "normal"
+                    }
+                except ValueError:
+                    due_analysis = {"due_date": due_date_str, "parse_error": True}
+            
+            # Build task data
+            task_data = {
+                "id": task['id'],
+                "title": task['title'],
+                "description": task.get('description', ''),
+                "column": col_name,
+                "priority": task.get('priority', 'medium'),
+                "created_at": task.get('created_at'),
+                "tags": task.get('tags', []),
+                "due_date_info": due_analysis,
+                "time_tracking": {
+                    "estimated_hours": estimated,
+                    "time_spent_hours": round(time_spent, 3),
+                    "progress_percentage": round(progress_percentage, 1) if progress_percentage else None,
+                    "timer": timer_status
+                },
+                "subtasks": {
+                    "total_count": len(task.get('subtasks', [])),
+                    "completed_count": sum(1 for st in task.get('subtasks', []) if st.get('completed', False)),
+                    "completion_percentage": round(calculate_subtask_progress(task)[2], 1)
+                }
+            }
+            
+            # Add time entries if requested
+            if include_time_entries:
+                task_data["time_entries"] = task.get('time_entries', [])
+            else:
+                task_data["time_entries_count"] = len(task.get('time_entries', []))
+            
+            tasks_data.append(task_data)
+    
+    report = {
+        "report_type": "detailed_tasks",
+        "generated_at": now.isoformat(),
+        "board_name": current_board_name,
+        "include_time_entries": include_time_entries,
+        "total_tasks": len(tasks_data),
+        "tasks": tasks_data
+    }
+    
+    return report
+
+def generate_time_tracking_report(date_range_days: Optional[int] = None) -> Dict[str, Any]:
+    """Generate a comprehensive time tracking report.
+    
+    Args:
+        date_range_days: Only include time entries from last N days (None for all)
+    
+    Returns:
+        Dict containing time tracking analysis
+    """
+    now = datetime.now()
+    current_board_name = get_current_board_name()
+    
+    # Filter time entries by date range if specified
+    cutoff_date = now - datetime.timedelta(days=date_range_days) if date_range_days else None
+    
+    time_data = {
+        "tasks": [],
+        "daily_summary": {},
+        "totals": {
+            "total_tracked_hours": 0.0,
+            "total_estimated_hours": 0.0,
+            "total_entries": 0,
+            "tasks_with_tracking": 0,
+            "tasks_with_estimates": 0
+        }
+    }
+    
+    for col_name, tasks in board.items():
+        for task in tasks:
+            time_spent = task.get('time_spent', 0.0)
+            estimated = task.get('estimated_hours')
+            time_entries = task.get('time_entries', [])
+            
+            # Filter time entries by date range
+            filtered_entries = []
+            if cutoff_date:
+                for entry in time_entries:
+                    try:
+                        entry_date = datetime.fromisoformat(entry['created_at'])
+                        if entry_date >= cutoff_date:
+                            filtered_entries.append(entry)
+                    except ValueError:
+                        continue
+            else:
+                filtered_entries = time_entries
+            
+            # Calculate filtered time spent
+            filtered_time_spent = sum(entry['hours'] for entry in filtered_entries)
+            
+            # Skip tasks with no time data in the filtered range
+            if filtered_time_spent == 0 and not estimated:
+                continue
+            
+            # Task time summary
+            task_time_data = {
+                "id": task['id'],
+                "title": task['title'],
+                "column": col_name,
+                "priority": task.get('priority', 'medium'),
+                "estimated_hours": estimated,
+                "total_time_spent": round(time_spent, 3),
+                "filtered_time_spent": round(filtered_time_spent, 3),
+                "time_entries_count": len(filtered_entries),
+                "efficiency_ratio": round((time_spent / estimated) if estimated and estimated > 0 else None, 2),
+                "timer_running": task.get('start_time') is not None
+            }
+            
+            # Daily breakdown for this task
+            daily_breakdown = {}
+            for entry in filtered_entries:
+                try:
+                    entry_date = datetime.fromisoformat(entry['created_at']).date().isoformat()
+                    if entry_date not in daily_breakdown:
+                        daily_breakdown[entry_date] = 0.0
+                    daily_breakdown[entry_date] += entry['hours']
+                except ValueError:
+                    continue
+            
+            task_time_data["daily_breakdown"] = daily_breakdown
+            time_data["tasks"].append(task_time_data)
+            
+            # Update totals
+            time_data["totals"]["total_tracked_hours"] += filtered_time_spent
+            time_data["totals"]["total_entries"] += len(filtered_entries)
+            
+            if filtered_time_spent > 0:
+                time_data["totals"]["tasks_with_tracking"] += 1
+            if estimated:
+                time_data["totals"]["total_estimated_hours"] += estimated
+                time_data["totals"]["tasks_with_estimates"] += 1
+            
+            # Add to daily summary
+            for date, hours in daily_breakdown.items():
+                if date not in time_data["daily_summary"]:
+                    time_data["daily_summary"][date] = 0.0
+                time_data["daily_summary"][date] += hours
+    
+    # Round totals
+    time_data["totals"]["total_tracked_hours"] = round(time_data["totals"]["total_tracked_hours"], 2)
+    time_data["totals"]["total_estimated_hours"] = round(time_data["totals"]["total_estimated_hours"], 2)
+    
+    # Calculate overall efficiency
+    if time_data["totals"]["total_estimated_hours"] > 0:
+        time_data["totals"]["overall_efficiency"] = round(
+            time_data["totals"]["total_tracked_hours"] / time_data["totals"]["total_estimated_hours"], 2
+        )
+    else:
+        time_data["totals"]["overall_efficiency"] = None
+    
+    report = {
+        "report_type": "time_tracking",
+        "generated_at": now.isoformat(),
+        "board_name": current_board_name,
+        "date_range_days": date_range_days,
+        "date_range_start": cutoff_date.isoformat() if cutoff_date else None,
+        "data": time_data
+    }
+    
+    return report
+
+def generate_productivity_report() -> Dict[str, Any]:
+    """Generate a productivity analysis report.
+    
+    Returns:
+        Dict containing productivity metrics and analysis
+    """
+    now = datetime.now()
+    current_board_name = get_current_board_name()
+    
+    # Analyze task creation and completion patterns
+    creation_by_day = {}
+    completion_by_priority = {'high': 0, 'medium': 0, 'low': 0}
+    tasks_by_age = {'new': 0, 'week': 0, 'month': 0, 'older': 0}
+    
+    # Time-based analysis
+    avg_completion_time = {}
+    overdue_analysis = []
+    
+    all_tasks = []
+    for col_name, tasks in board.items():
+        for task in tasks:
+            task_copy = task.copy()
+            task_copy['current_column'] = col_name
+            all_tasks.append(task_copy)
+    
+    # Analyze each task
+    for task in all_tasks:
+        # Creation date analysis
+        created_at_str = task.get('created_at')
+        if created_at_str:
+            try:
+                created_date = datetime.fromisoformat(created_at_str)
+                date_key = created_date.date().isoformat()
+                creation_by_day[date_key] = creation_by_day.get(date_key, 0) + 1
+                
+                # Age analysis
+                age_days = (now - created_date).days
+                if age_days <= 1:
+                    tasks_by_age['new'] += 1
+                elif age_days <= 7:
+                    tasks_by_age['week'] += 1
+                elif age_days <= 30:
+                    tasks_by_age['month'] += 1
+                else:
+                    tasks_by_age['older'] += 1
+                    
+            except ValueError:
+                pass
+        
+        # Completion analysis (only for Done tasks)
+        if task['current_column'] == 'Done':
+            priority = task.get('priority', 'medium')
+            completion_by_priority[priority] += 1
+        
+        # Overdue analysis
+        due_date_str = task.get('due_date')
+        if due_date_str and task['current_column'] != 'Done':
+            try:
+                due_date = datetime.fromisoformat(due_date_str)
+                if now > due_date:
+                    days_overdue = (now - due_date).days
+                    overdue_analysis.append({
+                        "task_id": task['id'],
+                        "title": task['title'],
+                        "days_overdue": days_overdue,
+                        "priority": task.get('priority', 'medium'),
+                        "column": task['current_column']
+                    })
+            except ValueError:
+                pass
+    
+    # Calculate productivity metrics
+    done_tasks = len(board.get('Done', []))
+    in_progress_tasks = len(board.get('In Progress', []))
+    todo_tasks = len(board.get('To Do', []))
+    
+    completion_rate = (done_tasks / (done_tasks + in_progress_tasks + todo_tasks) * 100) if (done_tasks + in_progress_tasks + todo_tasks) > 0 else 0
+    
+    # Work in progress ratio
+    wip_ratio = (in_progress_tasks / (todo_tasks + in_progress_tasks) * 100) if (todo_tasks + in_progress_tasks) > 0 else 0
+    
+    report = {
+        "report_type": "productivity_analysis",
+        "generated_at": now.isoformat(),
+        "board_name": current_board_name,
+        "metrics": {
+            "completion_rate_percentage": round(completion_rate, 1),
+            "wip_ratio_percentage": round(wip_ratio, 1),
+            "tasks_completed": done_tasks,
+            "tasks_in_progress": in_progress_tasks,
+            "tasks_todo": todo_tasks
+        },
+        "task_age_distribution": tasks_by_age,
+        "completion_by_priority": completion_by_priority,
+        "creation_pattern": creation_by_day,
+        "overdue_analysis": {
+            "count": len(overdue_analysis),
+            "tasks": sorted(overdue_analysis, key=lambda x: x['days_overdue'], reverse=True)
+        },
+        "recommendations": _generate_productivity_recommendations(completion_rate, wip_ratio, len(overdue_analysis), tasks_by_age)
+    }
+    
+    return report
+
+def _generate_productivity_recommendations(completion_rate: float, wip_ratio: float, overdue_count: int, tasks_by_age: Dict[str, int]) -> List[str]:
+    """Generate productivity recommendations based on metrics.
+    
+    Returns:
+        List of recommendation strings
+    """
+    recommendations = []
+    
+    # Completion rate recommendations
+    if completion_rate < 30:
+        recommendations.append("Consider breaking large tasks into smaller, more manageable pieces")
+    elif completion_rate > 80:
+        recommendations.append("Excellent completion rate! Consider taking on more challenging tasks")
+    
+    # WIP recommendations
+    if wip_ratio > 70:
+        recommendations.append("High work-in-progress ratio - consider focusing on completing existing tasks before starting new ones")
+    elif wip_ratio < 20:
+        recommendations.append("Low work-in-progress ratio - you might benefit from working on multiple tasks in parallel")
+    
+    # Overdue recommendations
+    if overdue_count > 0:
+        if overdue_count == 1:
+            recommendations.append("You have 1 overdue task - consider prioritizing it or adjusting the due date")
+        else:
+            recommendations.append(f"You have {overdue_count} overdue tasks - consider reviewing your time estimates and priorities")
+    
+    # Age-based recommendations
+    old_tasks = tasks_by_age.get('older', 0)
+    if old_tasks > 5:
+        recommendations.append(f"You have {old_tasks} tasks older than 30 days - consider archiving or re-evaluating their priority")
+    
+    if not recommendations:
+        recommendations.append("Your task management looks well-balanced! Keep up the good work.")
+    
+    return recommendations
+
+def save_report_to_file(report_data: Dict[str, Any], filename: Optional[str] = None) -> Tuple[bool, str]:
+    """Save report data to a JSON file with error handling.
+    
+    Args:
+        report_data: The report data to save
+        filename: Optional custom filename (will generate if not provided)
+    
+    Returns:
+        Tuple of (success, filepath_or_error_message)
+    """
+    try:
+        # Generate filename if not provided
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_type = report_data.get('report_type', 'report')
+            board_name = report_data.get('board_name', 'board').replace(' ', '_')
+            filename = f"kanban_report_{report_type}_{board_name}_{timestamp}.json"
+        
+        # Ensure .json extension
+        if not filename.lower().endswith('.json'):
+            filename += '.json'
+        
+        # Use atomic write for safety
+        temp_dir = os.path.dirname(os.path.abspath(filename))
+        
+        with tempfile.NamedTemporaryFile(mode='w', dir=temp_dir, 
+                                         suffix='.tmp', delete=False, 
+                                         encoding='utf-8') as temp_file:
+            json.dump(report_data, temp_file, indent=2, ensure_ascii=False)
+            temp_file_path = temp_file.name
+        
+        # Atomic replace operation
+        if os.name == 'nt':  # Windows
+            if os.path.exists(filename):
+                os.replace(temp_file_path, filename)
+            else:
+                os.rename(temp_file_path, filename)
+        else:  # Unix-like systems
+            os.replace(temp_file_path, filename)
+        
+        return True, os.path.abspath(filename)
+        
+    except PermissionError:
+        return False, f"Permission denied saving to {filename}"
+    except OSError as e:
+        return False, f"System error: {str(e)}"
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)}"
+    finally:
+        # Clean up temp file if it still exists
+        try:
+            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+        except OSError:
+            pass
+
+def export_reports_menu():
+    """Interactive menu for generating and exporting reports."""
+    console.clear()
+    console.rule("[bold green]📊 REPORT GENERATION[/]")
+    
+    # Check if there are tasks to report on
+    total_tasks = sum(len(tasks) for tasks in board.values())
+    if total_tasks == 0:
+        console.print("\n[yellow]No tasks found. Reports require at least one task.[/]")
+        console.print("[dim]Add some tasks first, then return to generate reports.[/]")
+        return
+    
+    current_board_name = get_current_board_name()
+    console.print(f"[dim]Generating reports for: [yellow]{current_board_name}[/yellow] ({total_tasks} tasks)[/dim]\n")
+    
+    while True:
+        console.print(Panel.fit(
+            "[bold cyan]1.[/] Board Summary Report\n"
+            "[bold cyan]2.[/] Detailed Tasks Report\n"
+            "[bold cyan]3.[/] Time Tracking Report\n"
+            "[bold cyan]4.[/] Productivity Analysis\n"
+            "[bold cyan]5.[/] Custom Export Options\n"
+            "[bold cyan]6.[/] Back to Main Menu",
+            title="[bold green]📋 REPORT TYPES",
+            subtitle="Choose a report to generate"
+        ))
+        
+        report_choice = Prompt.ask("[bold]Enter choice (1-6)[/]")
+        
+        try:
+            if report_choice == '1':
+                _export_board_summary()
+            elif report_choice == '2':
+                _export_detailed_tasks()
+            elif report_choice == '3':
+                _export_time_tracking_report()
+            elif report_choice == '4':
+                _export_productivity_analysis()
+            elif report_choice == '5':
+                _export_custom_options()
+            elif report_choice == '6':
+                break
+            else:
+                console.print("[red]⚠️ Please enter a number between 1 and 6[/]")
+                
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Returning to main menu...[/]")
+            break
+        except Exception as e:
+            display_error("Error generating report", e)
+
+def _export_board_summary():
+    """Export board summary report."""
+    console.print("\n[bold cyan]📊 Generating Board Summary Report...[/]")
+    
+    report = generate_board_summary_report()
+    
+    # Show preview
+    console.print(f"\n[bold]Report Preview:[/]")
+    console.print(f"  Total Tasks: {report['board_info']['total_tasks']}")
+    console.print(f"  Time Tracked: {format_duration(report['time_tracking']['total_hours_tracked'])}")
+    console.print(f"  Estimated: {format_duration(report['time_tracking']['total_hours_estimated'])}")
+    console.print(f"  Overdue Tasks: {report['overdue_count']}")
+    
+    # Ask for custom filename
+    custom_name = Prompt.ask("[blue]Custom filename[/] (optional, .json will be added)", default="")
+    filename = custom_name.strip() if custom_name.strip() else None
+    
+    success, result = save_report_to_file(report, filename)
+    if success:
+        console.print(f"\n[green]✅ Board summary exported successfully![/]")
+        console.print(f"[dim]Saved to: {result}[/]")
+    else:
+        console.print(f"\n[red]❌ Export failed: {result}[/]")
+    
+    input("\n[dim]Press Enter to continue...[/]")
+
+def _export_detailed_tasks():
+    """Export detailed tasks report with options."""
+    console.print("\n[bold cyan]📋 Generating Detailed Tasks Report...[/]")
+    
+    # Ask about time entries inclusion
+    include_time = Prompt.ask(
+        "[blue]Include full time entry details?[/] (increases file size) (y/N)",
+        default="N"
+    )
+    include_time_entries = include_time.lower() in ['y', 'yes']
+    
+    report = generate_detailed_tasks_report(include_time_entries)
+    
+    # Show preview
+    console.print(f"\n[bold]Report Preview:[/]")
+    console.print(f"  Tasks: {report['total_tasks']}")
+    console.print(f"  Include Time Entries: {'Yes' if include_time_entries else 'No'}")
+    
+    # Ask for custom filename
+    custom_name = Prompt.ask("[blue]Custom filename[/] (optional, .json will be added)", default="")
+    filename = custom_name.strip() if custom_name.strip() else None
+    
+    success, result = save_report_to_file(report, filename)
+    if success:
+        console.print(f"\n[green]✅ Detailed tasks report exported successfully![/]")
+        console.print(f"[dim]Saved to: {result}[/]")
+    else:
+        console.print(f"\n[red]❌ Export failed: {result}[/]")
+    
+    input("\n[dim]Press Enter to continue...[/]")
+
+def _export_time_tracking_report():
+    """Export time tracking report with date range options."""
+    console.print("\n[bold cyan]⏰ Generating Time Tracking Report...[/]")
+    
+    # Ask for date range
+    console.print("[dim]Choose date range for time entries:[/dim]")
+    console.print("  [cyan]1.[/] All time (complete history)")
+    console.print("  [cyan]2.[/] Last 7 days")
+    console.print("  [cyan]3.[/] Last 30 days")
+    console.print("  [cyan]4.[/] Custom range (days)")
+    
+    range_choice = Prompt.ask("[bold]Enter choice (1-4)[/]", default="1")
+    
+    date_range_days = None
+    if range_choice == '2':
+        date_range_days = 7
+    elif range_choice == '3':
+        date_range_days = 30
+    elif range_choice == '4':
+        try:
+            custom_days = int(Prompt.ask("[blue]Number of days to include[/]"))
+            if custom_days > 0:
+                date_range_days = custom_days
+            else:
+                console.print("[red]⚠️ Invalid range. Using all time.[/]")
+        except ValueError:
+            console.print("[red]⚠️ Invalid number. Using all time.[/]")
+    
+    report = generate_time_tracking_report(date_range_days)
+    
+    # Show preview
+    totals = report['data']['totals']
+    console.print(f"\n[bold]Report Preview:[/]")
+    console.print(f"  Date Range: {'All time' if not date_range_days else f'Last {date_range_days} days'}")
+    console.print(f"  Total Hours: {totals['total_tracked_hours']}")
+    console.print(f"  Total Entries: {totals['total_entries']}")
+    console.print(f"  Tasks with Data: {totals['tasks_with_tracking']}")
+    
+    # Ask for custom filename
+    custom_name = Prompt.ask("[blue]Custom filename[/] (optional, .json will be added)", default="")
+    filename = custom_name.strip() if custom_name.strip() else None
+    
+    success, result = save_report_to_file(report, filename)
+    if success:
+        console.print(f"\n[green]✅ Time tracking report exported successfully![/]")
+        console.print(f"[dim]Saved to: {result}[/]")
+    else:
+        console.print(f"\n[red]❌ Export failed: {result}[/]")
+    
+    input("\n[dim]Press Enter to continue...[/]")
+
+def _export_productivity_analysis():
+    """Export productivity analysis report."""
+    console.print("\n[bold cyan]📈 Generating Productivity Analysis...[/]")
+    
+    report = generate_productivity_report()
+    
+    # Show preview with recommendations
+    metrics = report['metrics']
+    recommendations = report['recommendations']
+    
+    console.print(f"\n[bold]Report Preview:[/]")
+    console.print(f"  Completion Rate: {metrics['completion_rate_percentage']}%")
+    console.print(f"  WIP Ratio: {metrics['wip_ratio_percentage']}%")
+    console.print(f"  Overdue Tasks: {report['overdue_analysis']['count']}")
+    
+    if recommendations:
+        console.print(f"\n[bold yellow]Key Recommendations:[/]")
+        for i, rec in enumerate(recommendations[:3], 1):  # Show first 3
+            console.print(f"  {i}. {rec}")
+    
+    # Ask for custom filename
+    custom_name = Prompt.ask("[blue]Custom filename[/] (optional, .json will be added)", default="")
+    filename = custom_name.strip() if custom_name.strip() else None
+    
+    success, result = save_report_to_file(report, filename)
+    if success:
+        console.print(f"\n[green]✅ Productivity analysis exported successfully![/]")
+        console.print(f"[dim]Saved to: {result}[/]")
+    else:
+        console.print(f"\n[red]❌ Export failed: {result}[/]")
+    
+    input("\n[dim]Press Enter to continue...[/]")
+
+def _export_custom_options():
+    """Export with custom filtering and options."""
+    console.print("\n[bold cyan]🔧 Custom Export Options[/]")
+    
+    # Ask for filtering criteria
+    console.print("[dim]Apply filters to export (leave empty to include all):[/dim]\n")
+    
+    # Column filter
+    column_filter = Prompt.ask(
+        "[blue]Include only column[/] (To Do/In Progress/Done, optional)",
+        default=""
+    )
+    if column_filter and column_filter not in board.keys():
+        console.print("[yellow]⚠️ Invalid column. Including all columns.[/]")
+        column_filter = None
+    
+    # Priority filter
+    priority_filter = Prompt.ask(
+        "[yellow]Include only priority[/] (high/medium/low, optional)",
+        default=""
+    )
+    if priority_filter and priority_filter.lower() not in ['high', 'medium', 'low']:
+        console.print("[yellow]⚠️ Invalid priority. Including all priorities.[/]")
+        priority_filter = None
+    else:
+        priority_filter = priority_filter.lower() if priority_filter else None
+    
+    # Tag filter
+    tag_filter = Prompt.ask("[magenta]Include only tasks with tag[/] (optional)", default="")
+    tag_filter = tag_filter.strip() if tag_filter else None
+    
+    # Generate filtered report
+    filtered_tasks = filter_tasks(
+        column_filter=column_filter,
+        priority_filter=priority_filter,
+        tag_search=tag_filter or ""
+    )
+    
+    if not filtered_tasks:
+        console.print("\n[yellow]No tasks match your filter criteria.[/]")
+        return
+    
+    # Create custom report
+    now = datetime.now()
+    current_board_name = get_current_board_name()
+    
+    report = {
+        "report_type": "custom_filtered",
+        "generated_at": now.isoformat(),
+        "board_name": current_board_name,
+        "filters_applied": {
+            "column": column_filter,
+            "priority": priority_filter,
+            "tag": tag_filter
+        },
+        "total_matching_tasks": len(filtered_tasks),
+        "tasks": []
+    }
+    
+    # Process filtered tasks
+    for col_name, task in filtered_tasks:
+        task_data = {
+            "id": task['id'],
+            "title": task['title'],
+            "description": task.get('description', ''),
+            "column": col_name,
+            "priority": task.get('priority', 'medium'),
+            "created_at": task.get('created_at'),
+            "due_date": task.get('due_date'),
+            "tags": task.get('tags', []),
+            "time_tracking": {
+                "estimated_hours": task.get('estimated_hours'),
+                "time_spent_hours": task.get('time_spent', 0.0),
+                "time_entries_count": len(task.get('time_entries', [])),
+                "timer_running": task.get('start_time') is not None
+            }
+        }
+        report["tasks"].append(task_data)
+    
+    # Show preview
+    console.print(f"\n[bold]Custom Report Preview:[/]")
+    console.print(f"  Matching Tasks: {len(filtered_tasks)}")
+    if column_filter:
+        console.print(f"  Column Filter: {column_filter}")
+    if priority_filter:
+        console.print(f"  Priority Filter: {priority_filter.title()}")
+    if tag_filter:
+        console.print(f"  Tag Filter: #{tag_filter}")
+    
+    # Ask for custom filename
+    custom_name = Prompt.ask("[blue]Custom filename[/] (optional, .json will be added)", default="")
+    filename = custom_name.strip() if custom_name.strip() else None
+    
+    success, result = save_report_to_file(report, filename)
+    if success:
+        console.print(f"\n[green]✅ Custom report exported successfully![/]")
+        console.print(f"[dim]Saved to: {result}[/]")
+    else:
+        console.print(f"\n[red]❌ Export failed: {result}[/]")
+    
+    input("\n[dim]Press Enter to continue...[/]")
+
+#endregion
+
 #region Board Management
 # ------------------------------
 # Board Management
@@ -2771,8 +3533,9 @@ def main_menu():
                 "[bold cyan]5.[/] Delete Task       [dim]([cyan]d[/])[/]\n"
                 "[bold cyan]6.[/] Search & Filter   [dim]([cyan]s[/])[/]\n"
                 "[bold cyan]7.[/] View Statistics    [dim]([cyan]r[/])[/]\n"
-                "[bold cyan]8.[/] Board Management  [dim]([cyan]b[/])[/]\n"
-                "[bold cyan]9.[/] Exit              [dim]([cyan]q[/])[/]",
+                "[bold cyan]8.[/] Export Reports     [dim]([cyan]x[/])[/]\n"
+                "[bold cyan]9.[/] Board Management  [dim]([cyan]b[/])[/]\n"
+                "[bold cyan]10.[/] Exit             [dim]([cyan]q[/])[/]",
                 title="[bold magenta]ENHANCED KANBAN MENU",
                 subtitle=f"{board_info}\nEnter number or shortcut key • [dim cyan]h[/dim cyan] for help"
             ))
@@ -2782,7 +3545,7 @@ def main_menu():
             
             for attempt in range(max_attempts):
                 try:
-                    raw_choice = Prompt.ask("[bold]Enter choice (1-9)[/]")
+                    raw_choice = Prompt.ask("[bold]Enter choice (1-10)[/]")
                     is_valid, error_msg = validate_menu_choice(raw_choice)
                     
                     if is_valid:
@@ -2833,8 +3596,10 @@ def main_menu():
                 view_statistics()
                 input("\n[dim]Press Enter to continue...[/dim]")
             elif choice == '8':
-                board_management_menu()
+                export_reports_menu()
             elif choice == '9':
+                board_management_menu()
+            elif choice == '10':
                 console.print("[bold yellow]👋 Exiting Enhanced Kanban Board. Goodbye![/]")
                 break
                 
