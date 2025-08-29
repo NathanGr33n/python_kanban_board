@@ -230,6 +230,44 @@ def validate_board_name(board_name: str) -> Tuple[bool, str]:
     
     return True, ""
 
+def validate_time_estimate(time_str: str) -> Tuple[bool, str]:
+    """Validate time estimate input (hours as decimal).
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not time_str or not time_str.strip():
+        return True, ""  # Time estimate is optional
+    
+    try:
+        hours = float(time_str.strip())
+        if hours < 0:
+            return False, "Time estimate must be a positive number"
+        if hours > 1000:  # Reasonable upper limit
+            return False, "Time estimate must be less than 1000 hours"
+        return True, ""
+    except ValueError:
+        return False, "Time estimate must be a valid number (e.g., 2.5 for 2.5 hours)"
+
+def validate_time_entry(time_str: str) -> Tuple[bool, str]:
+    """Validate time entry input (hours as decimal).
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not time_str or not time_str.strip():
+        return False, "Time entry cannot be empty"
+    
+    try:
+        hours = float(time_str.strip())
+        if hours <= 0:
+            return False, "Time entry must be greater than 0"
+        if hours > 24:  # Reasonable daily limit
+            return False, "Time entry must be 24 hours or less per entry"
+        return True, ""
+    except ValueError:
+        return False, "Time entry must be a valid number (e.g., 2.5 for 2.5 hours)"
+
 def validate_json_structure(data: Any) -> Tuple[bool, str]:
     """Validate that loaded JSON has the correct kanban board structure.
     
@@ -390,7 +428,7 @@ def format_due_date(due_date_str: Optional[str]) -> str:
         return f"⚠️ [dim]Invalid date[/]"
 
 def migrate_old_tasks() -> int:
-    """Migrate tasks from old format to new enhanced format.
+    """Migrate tasks from old format to new enhanced format with time tracking.
     
     Returns:
         int: Number of tasks migrated
@@ -423,14 +461,37 @@ def migrate_old_tasks() -> int:
                 task["tags"] = []
                 needs_migration = True
             
+            # Time tracking fields migration
+            if "estimated_hours" not in task:
+                task["estimated_hours"] = None
+                needs_migration = True
+            
+            if "time_spent" not in task:
+                task["time_spent"] = 0.0
+                needs_migration = True
+            
+            if "time_entries" not in task:
+                task["time_entries"] = []
+                needs_migration = True
+            
+            if "start_time" not in task:
+                task["start_time"] = None
+                needs_migration = True
+            
+            # Subtasks migration (existing)
+            if "subtasks" not in task:
+                task["subtasks"] = []
+                needs_migration = True
+            
             if needs_migration:
                 migrated_count += 1
     
     return migrated_count
 
 def create_enhanced_task(title: str, description: str = "", priority: str = "medium", 
-                        due_date: Optional[str] = None, tags: List[str] = None) -> Dict[str, Any]:
-    """Create a new task with enhanced fields.
+                        due_date: Optional[str] = None, tags: List[str] = None,
+                        estimated_hours: Optional[float] = None) -> Dict[str, Any]:
+    """Create a new task with enhanced fields including time tracking.
     
     Returns:
         Dict containing the new task
@@ -446,7 +507,12 @@ def create_enhanced_task(title: str, description: str = "", priority: str = "med
         "created_at": datetime.now().isoformat(),
         "due_date": due_date,
         "tags": tags,
-        "subtasks": []
+        "subtasks": [],
+        # Time tracking fields
+        "estimated_hours": estimated_hours,
+        "time_spent": 0.0,
+        "time_entries": [],  # List of time entry objects
+        "start_time": None   # For active time tracking
     }
 
 def validate_subtask_title(title: str) -> Tuple[bool, str]:
@@ -527,6 +593,158 @@ def get_subtask_matches(task: Dict[str, Any], subtask_id_fragment: str) -> List[
             matches.append(subtask)
     
     return matches
+
+# Time Tracking Utility Functions
+def format_duration(hours: float) -> str:
+    """Format duration in hours to human-readable format.
+    
+    Returns:
+        Formatted string like "2h 30m" or "45m" or "3h"
+    """
+    if hours == 0:
+        return "0h"
+    
+    total_minutes = int(hours * 60)
+    hours_part = total_minutes // 60
+    minutes_part = total_minutes % 60
+    
+    if hours_part > 0 and minutes_part > 0:
+        return f"{hours_part}h {minutes_part}m"
+    elif hours_part > 0:
+        return f"{hours_part}h"
+    else:
+        return f"{minutes_part}m"
+
+def create_time_entry(hours: float, description: str = "") -> Dict[str, Any]:
+    """Create a new time entry object.
+    
+    Returns:
+        Dict containing the time entry
+    """
+    return {
+        "id": str(uuid.uuid4())[:8],  # Short ID for time entries
+        "hours": hours,
+        "description": description.strip(),
+        "created_at": datetime.now().isoformat()
+    }
+
+def start_timer(task: Dict[str, Any]) -> bool:
+    """Start timer for a task.
+    
+    Returns:
+        bool: True if timer started successfully, False if already running
+    """
+    if task.get("start_time"):
+        return False  # Timer already running
+    
+    task["start_time"] = datetime.now().isoformat()
+    return True
+
+def stop_timer(task: Dict[str, Any], description: str = "") -> Optional[float]:
+    """Stop timer for a task and create time entry.
+    
+    Returns:
+        float: Hours worked, or None if timer wasn't running
+    """
+    start_time_str = task.get("start_time")
+    if not start_time_str:
+        return None  # Timer not running
+    
+    try:
+        start_time = datetime.fromisoformat(start_time_str)
+        end_time = datetime.now()
+        duration = end_time - start_time
+        hours = duration.total_seconds() / 3600  # Convert to hours
+        
+        # Create time entry
+        time_entry = create_time_entry(hours, description)
+        if "time_entries" not in task:
+            task["time_entries"] = []
+        task["time_entries"].append(time_entry)
+        
+        # Update total time spent
+        task["time_spent"] = task.get("time_spent", 0.0) + hours
+        
+        # Clear start time
+        task["start_time"] = None
+        
+        return hours
+        
+    except ValueError:
+        # Invalid start time, clear it
+        task["start_time"] = None
+        return None
+
+def get_timer_duration(task: Dict[str, Any]) -> Optional[float]:
+    """Get current timer duration without stopping it.
+    
+    Returns:
+        float: Hours elapsed, or None if timer not running
+    """
+    start_time_str = task.get("start_time")
+    if not start_time_str:
+        return None
+    
+    try:
+        start_time = datetime.fromisoformat(start_time_str)
+        current_time = datetime.now()
+        duration = current_time - start_time
+        return duration.total_seconds() / 3600
+    except ValueError:
+        return None
+
+def format_time_info(task: Dict[str, Any]) -> str:
+    """Format time tracking information for display.
+    
+    Returns:
+        Formatted string with time information
+    """
+    lines = []
+    
+    # Estimated time
+    estimated = task.get("estimated_hours")
+    if estimated:
+        lines.append(f"⏱️ Estimated: {format_duration(estimated)}")
+    
+    # Time spent
+    time_spent = task.get("time_spent", 0.0)
+    if time_spent > 0:
+        lines.append(f"⏰ Spent: {format_duration(time_spent)}")
+        
+        # Progress if we have estimate
+        if estimated and estimated > 0:
+            progress = (time_spent / estimated) * 100
+            if progress <= 100:
+                lines.append(f"📊 Progress: {progress:.0f}%")
+            else:
+                lines.append(f"⚠️ Over estimate: {progress:.0f}%")
+    
+    # Active timer
+    current_duration = get_timer_duration(task)
+    if current_duration is not None:
+        lines.append(f"▶️ [green]Timer running: {format_duration(current_duration)}[/]")
+    
+    return "\n".join(lines) if lines else "[dim]No time tracking data[/]"
+
+def log_time_entry(task: Dict[str, Any], hours: float, description: str = "") -> bool:
+    """Manually log a time entry for a task.
+    
+    Returns:
+        bool: True if logged successfully
+    """
+    try:
+        # Create time entry
+        time_entry = create_time_entry(hours, description)
+        if "time_entries" not in task:
+            task["time_entries"] = []
+        task["time_entries"].append(time_entry)
+        
+        # Update total time spent
+        task["time_spent"] = task.get("time_spent", 0.0) + hours
+        
+        return True
+    except Exception:
+        return False
 
 #endregion
 
@@ -1228,13 +1446,14 @@ def edit_task():
             "[bold cyan]3.[/] Edit Priority\n"
             "[bold cyan]4.[/] Edit Due Date\n"
             "[bold cyan]5.[/] Edit Tags\n"
-            "[bold cyan]6.[/] Move to Different Column\n"
-            "[bold cyan]7.[/] Finish Editing",
+            "[bold cyan]6.[/] Time Tracking\n"
+            "[bold cyan]7.[/] Move to Different Column\n"
+            "[bold cyan]8.[/] Finish Editing",
             title="[bold magenta]EDIT TASK",
             subtitle="Choose what to edit"
         ))
         
-        edit_choice = Prompt.ask("[bold]Enter choice (1-7)[/]")
+        edit_choice = Prompt.ask("[bold]Enter choice (1-8)[/]")
         
         if edit_choice == '1':
             _edit_task_title(task)
@@ -1247,12 +1466,14 @@ def edit_task():
         elif edit_choice == '5':
             _edit_task_tags(task)
         elif edit_choice == '6':
+            _edit_task_time_tracking(task)
+        elif edit_choice == '7':
             _edit_task_column(task, col_name)
             break  # Moving changes the context, so exit edit mode
-        elif edit_choice == '7':
+        elif edit_choice == '8':
             break
         else:
-            console.print("[red]⚠️ Please enter a number between 1 and 7[/]")
+            console.print("[red]⚠️ Please enter a number between 1 and 8[/]")
             continue
         
         # Save after each edit and show updated details
@@ -1395,6 +1616,180 @@ def _edit_task_tags(task: Dict[str, Any]) -> None:
                 console.print("[green]✅ Tags cleared[/]")
         else:
             console.print(f"[red]⚠️ {error_msg}. Tags unchanged.[/]")
+
+def _edit_task_time_tracking(task: Dict[str, Any]) -> None:
+    """Edit time tracking information for a task."""
+    console.print("\n[bold blue]⏱️ Time Tracking Management[/]")
+    
+    while True:
+        # Display current time information
+        time_info = format_time_info(task)
+        console.print(f"\n[bold]Current Time Tracking:[/]")
+        console.print(time_info)
+        
+        # Show time entries if they exist
+        time_entries = task.get("time_entries", [])
+        if time_entries:
+            console.print("\n[bold]Time Entries:[/]")
+            for i, entry in enumerate(time_entries[-5:], 1):  # Show last 5 entries
+                created_at = entry.get("created_at", "")
+                try:
+                    created_date = datetime.fromisoformat(created_at)
+                    date_str = created_date.strftime('%m/%d %H:%M')
+                except ValueError:
+                    date_str = created_at[:10] if created_at else "Unknown"
+                
+                description = entry.get("description", "")
+                desc_text = f" - {description}" if description else ""
+                console.print(f"  {i}. {format_duration(entry['hours'])} on {date_str}{desc_text}")
+            
+            if len(time_entries) > 5:
+                console.print(f"  [dim]... and {len(time_entries) - 5} more entries[/]")
+        
+        # Time tracking menu
+        console.print(Panel.fit(
+            "[bold cyan]1.[/] Set Time Estimate\n"
+            "[bold cyan]2.[/] Start Timer\n"
+            "[bold cyan]3.[/] Stop Timer\n"
+            "[bold cyan]4.[/] Log Time Entry\n"
+            "[bold cyan]5.[/] View All Time Entries\n"
+            "[bold cyan]6.[/] Back to Task Editing",
+            title="[bold blue]⏱️ TIME TRACKING",
+            subtitle="Choose an action"
+        ))
+        
+        time_choice = Prompt.ask("[bold]Enter choice (1-6)[/]")
+        
+        if time_choice == '1':
+            _edit_time_estimate(task)
+        elif time_choice == '2':
+            _start_task_timer(task)
+        elif time_choice == '3':
+            _stop_task_timer(task)
+        elif time_choice == '4':
+            _log_manual_time_entry(task)
+        elif time_choice == '5':
+            _view_all_time_entries(task)
+        elif time_choice == '6':
+            break
+        else:
+            console.print("[red]⚠️ Please enter a number between 1 and 6[/]")
+
+def _edit_time_estimate(task: Dict[str, Any]) -> None:
+    """Edit the time estimate for a task."""
+    current_estimate = task.get("estimated_hours")
+    if current_estimate:
+        console.print(f"\n[bold]Current estimate:[/] {format_duration(current_estimate)}")
+    else:
+        console.print("\n[bold]Current estimate:[/] [dim]Not set[/]")
+    
+    estimate_input = Prompt.ask(
+        "[blue]New time estimate[/] (hours, e.g. 2.5, empty to clear)",
+        default=str(current_estimate) if current_estimate else ""
+    )
+    
+    if not estimate_input.strip():
+        task["estimated_hours"] = None
+        console.print("[green]✅ Time estimate cleared[/]")
+    else:
+        is_valid, error_msg = validate_time_estimate(estimate_input)
+        if is_valid:
+            hours = float(estimate_input.strip())
+            task["estimated_hours"] = hours
+            console.print(f"[green]✅ Time estimate set to {format_duration(hours)}[/]")
+        else:
+            console.print(f"[red]⚠️ {error_msg}. Estimate unchanged.[/]")
+
+def _start_task_timer(task: Dict[str, Any]) -> None:
+    """Start the timer for a task."""
+    if start_timer(task):
+        console.print(f"[green]▶️ Timer started for '{task['title']}'[/]")
+    else:
+        current_duration = get_timer_duration(task)
+        if current_duration:
+            console.print(f"[yellow]⚠️ Timer is already running ({format_duration(current_duration)} elapsed)[/]")
+        else:
+            console.print("[red]⚠️ Could not start timer (invalid state)[/]")
+
+def _stop_task_timer(task: Dict[str, Any]) -> None:
+    """Stop the timer for a task."""
+    current_duration = get_timer_duration(task)
+    if current_duration is None:
+        console.print("[yellow]⚠️ No timer is currently running for this task[/]")
+        return
+    
+    console.print(f"[bold]Timer has been running for {format_duration(current_duration)}[/]")
+    description = Prompt.ask("[cyan]Description for this time entry[/] (optional)", default="")
+    
+    hours_worked = stop_timer(task, description)
+    if hours_worked:
+        console.print(f"[green]⏹️ Timer stopped. Logged {format_duration(hours_worked)} of work time[/]")
+        if description:
+            console.print(f"[dim]Description: {description}[/]")
+    else:
+        console.print("[red]⚠️ Could not stop timer (invalid state)[/]")
+
+def _log_manual_time_entry(task: Dict[str, Any]) -> None:
+    """Manually log a time entry for a task."""
+    console.print("\n[bold]Log Manual Time Entry[/]")
+    
+    for attempt in range(3):
+        time_input = Prompt.ask("[green]Hours worked[/] (e.g. 2.5 for 2 hours 30 minutes)")
+        is_valid, error_msg = validate_time_entry(time_input)
+        if is_valid:
+            hours = float(time_input.strip())
+            description = Prompt.ask("[cyan]Description[/] (optional)", default="")
+            
+            if log_time_entry(task, hours, description):
+                console.print(f"[green]✅ Logged {format_duration(hours)} of work time[/]")
+                if description:
+                    console.print(f"[dim]Description: {description}[/]")
+                return
+            else:
+                console.print("[red]⚠️ Could not log time entry[/]")
+                return
+        else:
+            console.print(f"[red]⚠️ {error_msg}[/]")
+            if attempt < 2:
+                console.print(f"[dim]Please try again ({attempt + 1}/3 attempts used)[/]")
+    
+    console.print("[yellow]❌ Too many invalid attempts. Time entry not logged.[/]")
+
+def _view_all_time_entries(task: Dict[str, Any]) -> None:
+    """Display all time entries for a task."""
+    time_entries = task.get("time_entries", [])
+    
+    if not time_entries:
+        console.print("\n[yellow]No time entries found for this task.[/]")
+        return
+    
+    console.print(f"\n[bold cyan]⏰ All Time Entries for '{task['title']}'[/]")
+    console.print(f"[dim]Total time spent: {format_duration(task.get('time_spent', 0.0))}[/]\n")
+    
+    # Create table for time entries
+    table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Duration", style="yellow", width=10)
+    table.add_column("Date/Time", style="blue", width=16)
+    table.add_column("Description", style="dim", min_width=20)
+    
+    for i, entry in enumerate(time_entries, 1):
+        duration = format_duration(entry['hours'])
+        
+        created_at = entry.get("created_at", "")
+        try:
+            created_date = datetime.fromisoformat(created_at)
+            date_time = created_date.strftime('%m/%d/%Y %H:%M')
+        except ValueError:
+            date_time = created_at if created_at else "Unknown"
+        
+        description = entry.get("description", "")
+        desc_text = description if description else "[dim]No description[/]"
+        
+        table.add_row(str(i), duration, date_time, desc_text)
+    
+    console.print(table)
+    input("\n[dim]Press Enter to continue...[/]")
 
 def _edit_task_column(task: Dict[str, Any], current_col: str) -> None:
     """Move task to a different column."""
