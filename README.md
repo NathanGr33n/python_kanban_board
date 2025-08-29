@@ -16,7 +16,9 @@ Major feature updates have been implemented to enhance productivity and project 
 ### 🆕 **Version 2.0 Features**
 - ✨ **Multiple Boards Support**: Create separate boards for different projects
 - ✅ **Subtasks System**: Break down complex tasks into manageable subtasks with progress tracking
-- ⌨️ **Keyboard Shortcuts**: Single-key shortcuts for all major functions (`v`, `a`, `e`, `m`, `d`, `s`, `r`, `b`, `q`)
+- ⏰ **Time Tracking System**: Built-in timer, time estimates, manual time logging, and time analytics
+- 📊 **JSON Export & Reports**: Generate detailed reports (board summary, time tracking, productivity analysis)
+- ⌨️ **Keyboard Shortcuts**: Single-key shortcuts for all major functions (`v`, `a`, `e`, `m`, `d`, `s`, `r`, `x`, `b`, `q`)
 - 🔍 **Advanced Search & Filter**: Multi-criteria filtering by title, description, priority, tags, due dates
 - 📈 **Statistics Dashboard**: Comprehensive analytics with priority breakdown, overdue tracking, tag usage
 - 🔧 **Automatic Migration**: Legacy single-board data automatically upgrades to new format
@@ -33,9 +35,11 @@ All existing functionality remains fully compatible with automatic data migratio
 - **📅 Due Date Tracking**: Smart due date display with overdue warnings
 - **🏷️ Tagging System**: Organize tasks with customizable tags
 - **✅ Subtask Support**: Break down tasks into manageable subtasks with progress tracking
+- **⏰ Time Tracking**: Built-in timer, time estimates, manual logging, and time analytics
 - **✏️ In-Place Editing**: Edit any task field after creation
 - **🔍 Advanced Search & Filter**: Filter tasks by title, description, priority, tags, due dates
 - **📈 Statistics & Analytics**: Comprehensive board statistics and progress insights
+- **📊 JSON Export & Reports**: Generate detailed reports and export data for external analysis
 - **🎨 Beautiful Interface**: Rich terminal UI with colors and formatting
 - **💾 Persistent Storage**: JSON-based data persistence with auto-migration
 
@@ -101,13 +105,14 @@ All existing functionality remains fully compatible with automatic data migratio
 ### Main Menu Options
 1. **View Board** (`v`) - Display current state of all tasks with rich formatting
 2. **Add Task** (`a`) - Create new enhanced task with properties like priority, due dates, tags
-3. **Edit Task** (`e`) - Edit any existing task properties including subtasks
+3. **Edit Task** (`e`) - Edit any existing task properties including subtasks and time tracking
 4. **Move Task** (`m`) - Move task between columns using task ID
 5. **Delete Task** (`d`) - Remove task from board (with confirmation)
 6. **Search & Filter** (`s`) - Advanced search and filtering capabilities
 7. **View Statistics** (`r`) - Comprehensive board analytics and reports
-8. **Board Management** (`b`) - Create, switch, rename, and delete boards
-9. **Exit** (`q`) - Save and quit the application
+8. **Export Reports** (`x`) - Generate and export JSON reports (board summary, time tracking, productivity)
+9. **Board Management** (`b`) - Create, switch, rename, and delete boards
+10. **Exit** (`q`) - Save and quit the application
 
 ### Keyboard Shortcuts
 For faster navigation, you can use single-key shortcuts instead of menu numbers:
@@ -162,6 +167,47 @@ EDIT TASK MENU:
 ✅ Create login endpoint
 ⏳ Create logout endpoint
 ⏳ Add authentication middleware
+```
+
+### ⏰ Time Tracking System
+Track time spent on tasks with built-in timer and manual logging:
+```
+# Time tracking during task editing:
+📝 Editing Task: Implement user authentication
+
+EDIT TASK MENU:
+6. Time Tracking
+
+⏱️ TIME TRACKING MENU:
+1. Set Time Estimate
+2. Start Timer
+3. Stop Timer  
+4. Log Time Entry
+5. View All Time Entries
+
+# Set time estimate:
+New time estimate (hours, e.g. 2.5): 4
+✅ Time estimate set to 4h
+
+# Start/Stop timer workflow:
+▶️ Timer started for 'Implement user authentication'
+# ... work on task ...
+Description for this time entry: Initial JWT setup
+✅ Timer stopped. Logged 1h 23m
+
+# Manual time logging:
+Time worked (hours): 0.5
+Description: Code review and testing
+✅ Time logged: 30m
+
+# View time summary:
+⏱️ Estimated: 4h
+⏰ Spent: 1h 53m
+📊 Progress: 48%
+
+📋 Recent Time Entries:
+  1. 1h 23m on 08/28 14:30 - Initial JWT setup
+  2. 30m on 08/28 16:15 - Code review and testing
 ```
 
 ### Multiple Boards Workflow
@@ -228,6 +274,70 @@ Done: 3
 ⚠️ OVERDUE TASKS
 a1b2 - Fix critical security vulnerability
 c3d4 - Update user documentation
+```
+
+### 📊 JSON Export & Reports
+Generate comprehensive reports and export data for external analysis:
+```
+# Main export menu (press 'x' or choose option 8):
+📊 REPORT TYPES
+1. Board Summary Report
+2. Detailed Tasks Report  
+3. Time Tracking Report
+4. Productivity Analysis
+5. Custom Export Options
+
+# Board Summary Report:
+📊 Generating Board Summary Report...
+Report Preview:
+  Total Tasks: 15
+  Time Tracked: 24h 30m
+  Estimated: 32h
+  Overdue Tasks: 2
+
+Custom filename (optional, .json will be added): project_summary
+✅ Board summary exported successfully!
+Saved to: E:\project_summary_20250829_041200.json
+
+# Time Tracking Report with date filtering:
+⏰ Generating Time Tracking Report...
+Choose date range:
+  1. All time (complete history)
+  2. Last 7 days
+  3. Last 30 days
+  4. Custom range
+
+Enter choice: 2
+Report Preview:
+  Date Range: Last 7 days
+  Total Hours: 12.5
+  Total Entries: 8
+  Tasks with Data: 5
+
+# Productivity Analysis:
+📈 Generating Productivity Analysis...
+Report Preview:
+  Completion Rate: 68.2%
+  WIP Ratio: 33.3%
+  Overdue Tasks: 2
+
+Key Recommendations:
+  1. Focus on completing In Progress tasks before starting new ones
+  2. Address 2 overdue high-priority tasks first
+  3. Consider breaking down large tasks into smaller subtasks
+
+# Custom filtered export:
+🔧 Custom Export Options
+Apply filters (leave empty to include all):
+Include only column: In Progress
+Include only priority: high
+Include only tasks with tag: security
+
+Custom Report Preview:
+  Matching Tasks: 3
+  Column Filter: In Progress
+  Priority Filter: High
+  Tag Filter: #security
 ```
 
 ### Basic Example Workflow
@@ -388,11 +498,23 @@ Backward compatible with original format:
 - **tags**: Array of tag strings
 - **subtasks**: Array of subtask objects
 
+#### Time Tracking Fields
+- **estimated_hours**: Optional float for time estimate
+- **time_spent**: Float total hours spent on task
+- **time_entries**: Array of time entry objects with hours, description, and timestamps
+- **start_time**: ISO datetime string for active timer (null when timer not running)
+
 #### Subtask Structure
 - **id**: Short UUID for subtask identification
 - **title**: Subtask title (1-80 characters)
 - **completed**: Boolean completion status
 - **created_at**: ISO datetime string
+
+#### Time Entry Structure
+- **id**: Short UUID for time entry identification
+- **hours**: Float hours worked in this entry
+- **description**: Optional description of work performed
+- **created_at**: ISO datetime string when logged
 
 ### Validation & Error Handling
 
