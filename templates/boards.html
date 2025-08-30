@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board Management - Enhanced Kanban Board</title>
+    <link rel="stylesheet" href="/static/css/kanban.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="icon">🗂️</span>
+                    Board Management
+                </h1>
+                <div class="board-info">
+                    <span class="current-board">{{ current_board_name }}</span>
+                </div>
+                <div class="header-actions">
+                    <a href="/" class="btn btn-secondary">
+                        <span class="icon">📋</span> Back to Board
+                    </a>
+                    <a href="/statistics" class="btn btn-secondary">
+                        <span class="icon">📊</span> Statistics
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="kanban-container">
+            <div style="max-width: 800px; margin: 0 auto;">
+                <div class="boards-actions" style="margin-bottom: 2rem;">
+                    <button id="create-board-btn" class="btn btn-primary">
+                        <span class="icon">➕</span> Create New Board
+                    </button>
+                </div>
+
+                {% if boards %}
+                <div class="boards-grid">
+                    {% for board in boards %}
+                    <div class="board-item {{ 'current' if board.is_current else '' }}">
+                        <div class="board-info">
+                            <div class="board-name">{{ board.name }}</div>
+                            <div class="board-meta">
+                                {{ board.task_count }} tasks • 
+                                Created {{ board.created_at[:10] if board.created_at else 'Unknown' }}
+                                {% if board.is_current %} • <strong>Current Board</strong>{% endif %}
+                            </div>
+                        </div>
+                        <div class="board-actions">
+                            {% if not board.is_current %}
+                            <button class="btn btn-primary" onclick="switchBoard('{{ board.id }}')">
+                                Switch
+                            </button>
+                            {% else %}
+                            <span style="color: var(--primary-color); font-weight: 600;">Active</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="text-align: center; padding: 3rem; color: var(--gray-500);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+                    <h3>No boards found</h3>
+                    <p>Create your first board to get started!</p>
+                    <button id="create-first-board-btn" class="btn btn-primary" style="margin-top: 1rem;">
+                        <span class="icon">➕</span> Create First Board
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </main>
+
+        <!-- Toast Notifications -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <script>
+        // Simple board management JavaScript
+        async function switchBoard(boardId) {
+            try {
+                const response = await fetch(`/api/boards/${boardId}/switch`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showToast('success', `Switched to ${result.board_name}!`);
+                    // Reload page to reflect board change
+                    setTimeout(() => window.location.href = '/', 1000);
+                } else {
+                    showToast('error', result.detail || 'Failed to switch board');
+                }
+            } catch (error) {
+                console.error('Error switching board:', error);
+                showToast('error', 'Network error. Please try again.');
+            }
+        }
+
+        async function createBoard() {
+            const name = prompt('Enter board name:');
+            if (name && name.trim()) {
+                try {
+                    const formData = new FormData();
+                    formData.append('name', name.trim());
+                    
+                    const response = await fetch('/api/boards', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showToast('success', `Board "${name}" created successfully!`);
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        showToast('error', result.detail || 'Failed to create board');
+                    }
+                } catch (error) {
+                    console.error('Error creating board:', error);
+                    showToast('error', 'Network error. Please try again.');
+                }
+            }
+        }
+
+        function showToast(type, message, duration = 4000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-message">${message}</div>
+            `;
+
+            container.appendChild(toast);
+
+            // Auto remove after duration
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+
+            // Click to dismiss
+            toast.addEventListener('click', () => {
+                toast.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => toast.remove(), 300);
+            });
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('create-board-btn')?.addEventListener('click', createBoard);
+            document.getElementById('create-first-board-btn')?.addEventListener('click', createBoard);
+        });
+    </script>
+</body>
+</html>

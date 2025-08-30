@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics - {{ current_board_name }}</title>
+    <link rel="stylesheet" href="/static/css/kanban.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="icon">📊</span>
+                    Statistics & Analytics
+                </h1>
+                <div class="board-info">
+                    <span class="current-board">{{ current_board_name }}</span>
+                </div>
+                <div class="header-actions">
+                    <a href="/" class="btn btn-secondary">
+                        <span class="icon">📋</span> Back to Board
+                    </a>
+                    <a href="/boards" class="btn btn-secondary">
+                        <span class="icon">🗂️</span> Boards
+                    </a>
+                    <button id="refresh-stats-btn" class="btn btn-secondary">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="kanban-container">
+            <div class="stats-dashboard">
+                <!-- Overview Stats -->
+                <div class="stats-section">
+                    <h2 class="section-title">📈 Overview</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">📝</div>
+                            <div class="stat-content">
+                                <div class="stat-number">{{ stats.total_tasks }}</div>
+                                <div class="stat-label">Total Tasks</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⏳</div>
+                            <div class="stat-content">
+                                <div class="stat-number">{{ stats.by_column['To Do'] }}</div>
+                                <div class="stat-label">To Do</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⚡</div>
+                            <div class="stat-content">
+                                <div class="stat-number">{{ stats.by_column['In Progress'] }}</div>
+                                <div class="stat-label">In Progress</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">✅</div>
+                            <div class="stat-content">
+                                <div class="stat-number">{{ stats.by_column['Done'] }}</div>
+                                <div class="stat-label">Completed</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Priority Breakdown -->
+                <div class="stats-section">
+                    <h2 class="section-title">🎨 Priority Breakdown</h2>
+                    <div class="priority-stats">
+                        <div class="priority-item">
+                            <div class="priority-icon">🔴</div>
+                            <div class="priority-content">
+                                <div class="priority-label">High Priority</div>
+                                <div class="priority-count">{{ stats.by_priority.high }} tasks</div>
+                            </div>
+                            <div class="priority-bar">
+                                <div class="priority-fill high" style="width: {{ (stats.by_priority.high / stats.total_tasks * 100) if stats.total_tasks > 0 else 0 }}%"></div>
+                            </div>
+                        </div>
+                        <div class="priority-item">
+                            <div class="priority-icon">🟡</div>
+                            <div class="priority-content">
+                                <div class="priority-label">Medium Priority</div>
+                                <div class="priority-count">{{ stats.by_priority.medium }} tasks</div>
+                            </div>
+                            <div class="priority-bar">
+                                <div class="priority-fill medium" style="width: {{ (stats.by_priority.medium / stats.total_tasks * 100) if stats.total_tasks > 0 else 0 }}%"></div>
+                            </div>
+                        </div>
+                        <div class="priority-item">
+                            <div class="priority-icon">🟢</div>
+                            <div class="priority-content">
+                                <div class="priority-label">Low Priority</div>
+                                <div class="priority-count">{{ stats.by_priority.low }} tasks</div>
+                            </div>
+                            <div class="priority-bar">
+                                <div class="priority-fill low" style="width: {{ (stats.by_priority.low / stats.total_tasks * 100) if stats.total_tasks > 0 else 0 }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Due Date Status -->
+                <div class="stats-section">
+                    <h2 class="section-title">📅 Due Date Status</h2>
+                    <div class="due-date-stats">
+                        {% if stats.due_stats.overdue > 0 %}
+                        <div class="due-date-item urgent">
+                            <div class="due-date-icon">⏰</div>
+                            <div class="due-date-content">
+                                <div class="due-date-label">Overdue Tasks</div>
+                                <div class="due-date-count">{{ stats.due_stats.overdue }} tasks</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="due-date-item">
+                            <div class="due-date-icon">⏳</div>
+                            <div class="due-date-content">
+                                <div class="due-date-label">Due Today</div>
+                                <div class="due-date-count">{{ stats.due_stats.due_today }} tasks</div>
+                            </div>
+                        </div>
+                        <div class="due-date-item">
+                            <div class="due-date-icon">📅</div>
+                            <div class="due-date-content">
+                                <div class="due-date-label">Upcoming (7 days)</div>
+                                <div class="due-date-count">{{ stats.due_stats.upcoming }} tasks</div>
+                            </div>
+                        </div>
+                        <div class="due-date-item">
+                            <div class="due-date-icon">📝</div>
+                            <div class="due-date-content">
+                                <div class="due-date-label">No Due Date</div>
+                                <div class="due-date-count">{{ stats.due_stats.no_due_date }} tasks</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Tags -->
+                {% if stats.tag_usage %}
+                <div class="stats-section">
+                    <h2 class="section-title">🏷️ Most Used Tags</h2>
+                    <div class="tags-stats">
+                        {% for tag, count in stats.tag_usage[:10] %}
+                        <div class="tag-item">
+                            <span class="tag-name">#{{ tag }}</span>
+                            <span class="tag-count">{{ count }} tasks</span>
+                            <div class="tag-bar">
+                                <div class="tag-fill" style="width: {{ (count / stats.tag_usage[0][1] * 100) if stats.tag_usage else 0 }}%"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Overdue Tasks -->
+                {% if stats.overdue_tasks %}
+                <div class="stats-section">
+                    <h2 class="section-title">⚠️ Overdue Tasks</h2>
+                    <div class="overdue-tasks">
+                        {% for task in stats.overdue_tasks[:10] %}
+                        <div class="overdue-task">
+                            <div class="task-priority priority-{{ task.priority }}">
+                                {% if task.priority == 'high' %}🔴{% elif task.priority == 'medium' %}🟡{% else %}🟢{% endif %}
+                            </div>
+                            <div class="task-info">
+                                <div class="task-title">{{ task.title }}</div>
+                                <div class="task-meta">
+                                    ID: {{ task.id[:8] }} • 
+                                    Due: {{ task.due_date[:10] if task.due_date else 'Unknown' }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% if stats.overdue_tasks|length > 10 %}
+                        <div class="more-tasks">
+                            ... and {{ stats.overdue_tasks|length - 10 }} more overdue tasks
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Progress Visualization -->
+                <div class="stats-section">
+                    <h2 class="section-title">📈 Progress Overview</h2>
+                    <div class="progress-chart">
+                        {% set completion_rate = (stats.by_column['Done'] / stats.total_tasks * 100) if stats.total_tasks > 0 else 0 %}
+                        <div class="progress-circle" data-progress="{{ completion_rate }}">
+                            <svg viewBox="0 0 100 100" class="progress-svg">
+                                <circle cx="50" cy="50" r="45" class="progress-bg"></circle>
+                                <circle cx="50" cy="50" r="45" class="progress-bar" 
+                                        style="stroke-dasharray: {{ completion_rate * 2.827 }}, 282.7"></circle>
+                            </svg>
+                            <div class="progress-content">
+                                <div class="progress-percentage">{{ "%.1f"|format(completion_rate) }}%</div>
+                                <div class="progress-label">Complete</div>
+                            </div>
+                        </div>
+                        <div class="progress-details">
+                            <div class="progress-item">
+                                <div class="progress-dot todo"></div>
+                                <span>To Do: {{ stats.by_column['To Do'] }}</span>
+                            </div>
+                            <div class="progress-item">
+                                <div class="progress-dot progress"></div>
+                                <span>In Progress: {{ stats.by_column['In Progress'] }}</span>
+                            </div>
+                            <div class="progress-item">
+                                <div class="progress-dot done"></div>
+                                <span>Done: {{ stats.by_column['Done'] }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <style>
+        /* Additional CSS for statistics page */
+        .stats-dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .stats-section {
+            background: var(--white);
+            border-radius: var(--rounded-lg);
+            padding: var(--space-6);
+            margin-bottom: var(--space-6);
+            box-shadow: var(--shadow);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin-bottom: var(--space-4);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+        }
+
+        .stat-card {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--rounded-md);
+            padding: var(--space-4);
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            opacity: 0.8;
+        }
+
+        .stat-number {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: var(--gray-800);
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .priority-stats {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+        }
+
+        .priority-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+        }
+
+        .priority-icon {
+            font-size: 1.5rem;
+        }
+
+        .priority-content {
+            min-width: 140px;
+        }
+
+        .priority-label {
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .priority-count {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .priority-bar {
+            flex: 1;
+            height: 8px;
+            background: var(--gray-200);
+            border-radius: var(--rounded);
+            overflow: hidden;
+        }
+
+        .priority-fill {
+            height: 100%;
+            border-radius: var(--rounded);
+        }
+
+        .priority-fill.high {
+            background: var(--priority-high);
+        }
+
+        .priority-fill.medium {
+            background: var(--priority-medium);
+        }
+
+        .priority-fill.low {
+            background: var(--priority-low);
+        }
+
+        .due-date-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+        }
+
+        .due-date-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: var(--space-3);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--rounded-md);
+        }
+
+        .due-date-item.urgent {
+            border-color: var(--error-color);
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .due-date-icon {
+            font-size: 1.5rem;
+        }
+
+        .due-date-label {
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .due-date-count {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .tags-stats {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+        }
+
+        .tag-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .tag-name {
+            min-width: 120px;
+            font-weight: 500;
+            color: var(--primary-color);
+        }
+
+        .tag-count {
+            min-width: 80px;
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .tag-bar {
+            flex: 1;
+            height: 6px;
+            background: var(--gray-200);
+            border-radius: var(--rounded);
+            overflow: hidden;
+        }
+
+        .tag-fill {
+            height: 100%;
+            background: var(--primary-color);
+            border-radius: var(--rounded);
+        }
+
+        .overdue-tasks {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+        }
+
+        .overdue-task {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: var(--space-3);
+            border: 1px solid var(--error-color);
+            border-radius: var(--rounded-md);
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .progress-chart {
+            display: flex;
+            align-items: center;
+            gap: var(--space-8);
+        }
+
+        .progress-circle {
+            position: relative;
+            width: 200px;
+            height: 200px;
+        }
+
+        .progress-svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .progress-bg {
+            fill: none;
+            stroke: var(--gray-200);
+            stroke-width: 8;
+        }
+
+        .progress-bar {
+            fill: none;
+            stroke: var(--primary-color);
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.5s ease;
+        }
+
+        .progress-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .progress-percentage {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--gray-800);
+            line-height: 1;
+        }
+
+        .progress-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .progress-details {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+        }
+
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: 0.875rem;
+            color: var(--gray-700);
+        }
+
+        .progress-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .progress-dot.todo {
+            background: var(--gray-400);
+        }
+
+        .progress-dot.progress {
+            background: var(--warning-color);
+        }
+
+        .progress-dot.done {
+            background: var(--success-color);
+        }
+
+        .more-tasks {
+            padding: var(--space-3);
+            text-align: center;
+            color: var(--gray-500);
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .progress-chart {
+                flex-direction: column;
+                gap: var(--space-4);
+            }
+
+            .progress-circle {
+                width: 150px;
+                height: 150px;
+            }
+        }
+    </style>
+
+    <script>
+        // Refresh statistics
+        document.getElementById('refresh-stats-btn')?.addEventListener('click', () => {
+            window.location.reload();
+        });
+
+        // Update last updated timestamp
+        document.addEventListener('DOMContentLoaded', () => {
+            const now = new Date();
+            const timeString = now.toLocaleString();
+            
+            // You could add this to the page if needed
+            console.log(`Statistics loaded at ${timeString}`);
+        });
+    </script>
+</body>
+</html>

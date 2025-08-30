@@ -82,6 +82,7 @@ All existing functionality remains fully compatible with automatic data migratio
 ### Prerequisites
 - Python 3.7 or higher
 - pip (Python package installer)
+- Modern web browser (for web interface)
 
 ### Setup
 1. **Clone the repository**:
@@ -95,10 +96,72 @@ All existing functionality remains fully compatible with automatic data migratio
    pip install -r requirements.txt
    ```
 
-3. **Run the application**:
+3. **Choose your interface**:
+   
+   **🌐 Web Interface (Recommended)**:
+   ```bash
+   python start_web.py
+   ```
+   
+   **💻 Terminal Interface**:
    ```bash
    python kanban.py
    ```
+
+## 🌐 Web Interface
+
+The Enhanced Kanban Board now includes a modern web interface with real-time collaboration features!
+
+### Features
+- **🖱️ Drag & Drop**: Move tasks between columns with intuitive drag-and-drop
+- **⚡ Real-Time Updates**: See changes instantly via WebSocket connections
+- **📱 Mobile Responsive**: Works perfectly on phones, tablets, and desktops
+- **🎨 Modern UI**: Clean, professional interface with smooth animations
+- **🔄 Live Sync**: Multiple users can collaborate on the same board
+- **⌨️ Keyboard Shortcuts**: Full keyboard navigation support
+- **📊 Interactive Stats**: Beautiful charts and analytics
+- **🌙 Auto-Refresh**: Due dates and status update automatically
+
+### Getting Started
+1. **Start the web server**:
+   ```bash
+   python start_web.py
+   ```
+
+2. **Open your browser** to `http://localhost:8000`
+
+3. **Start managing tasks** with the intuitive web interface!
+
+### Web Interface Screenshots
+```
+📋 Main Board View
+┌─────────────────────────────────────────────────────────────┐
+│  📋 Enhanced Kanban Board                    [Add Task] [⚙️] │
+├─────────────┬─────────────────┬───────────────────────────────┤
+│   To Do     │   In Progress   │           Done                │
+├─────────────┼─────────────────┼───────────────────────────────┤
+│ 🔴 Fix bug  │ 🟡 Review PR    │ 🟢 Deploy v2.1               │
+│ (abc1) ✏️🗑️  │ (def2) ✏️🗑️     │ (ghi3) ✏️🗑️                    │
+│ #urgent     │ #review         │ ✅ Completed                  │
+└─────────────┴─────────────────┴───────────────────────────────┘
+
+✨ Drag tasks between columns • 🔄 Real-time updates • 📱 Mobile ready
+```
+
+### Network Access
+The web interface is accessible from:
+- **Local**: `http://localhost:8000`
+- **Network**: `http://[your-ip]:8000` (for team collaboration)
+- **Mobile**: Same URLs work on mobile devices
+
+### Web API Endpoints
+For developers, the web interface exposes a REST API:
+- `GET /api/board` - Get current board data
+- `POST /api/tasks` - Create new task
+- `PUT /api/tasks/{id}` - Update task
+- `DELETE /api/tasks/{id}` - Delete task
+- `GET /api/statistics` - Get board statistics
+- `WebSocket /ws` - Real-time updates
 
 ## 📖 Usage
 
@@ -392,9 +455,21 @@ Move to: In Progress
 
 ```
 python_kanban_board/
-├── kanban.py              # Main application
+├── kanban.py              # Terminal application
+├── web_app.py            # FastAPI web application  
+├── start_web.py          # Web server launcher
 ├── requirements.txt       # Python dependencies
 ├── kanban_data.json      # Task data (auto-created)
+├── templates/            # HTML templates
+│   ├── index.html        # Main kanban board page
+│   ├── boards.html       # Board management page
+│   └── statistics.html   # Statistics & analytics page
+├── static/               # Web assets
+│   ├── css/
+│   │   └── kanban.css    # Stylesheet
+│   └── js/
+│       └── kanban.js     # JavaScript functionality
+├── test_kanban_features.py # Test suite
 ├── README.md             # This file
 ├── LICENSE               # License information
 └── .gitignore            # Git ignore rules

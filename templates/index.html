@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ current_board_name }} - Enhanced Kanban Board</title>
+    <link rel="stylesheet" href="/static/css/kanban.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="icon">📋</span>
+                    Enhanced Kanban Board
+                </h1>
+                <div class="board-info">
+                    <span class="current-board">{{ current_board_name }}</span>
+                    {% if boards_count > 1 %}
+                    <span class="boards-count">({{ boards_count }} boards)</span>
+                    {% endif %}
+                </div>
+                <div class="header-actions">
+                    <button id="add-task-btn" class="btn btn-primary">
+                        <span class="icon">➕</span> Add Task
+                    </button>
+                    <button id="boards-btn" class="btn btn-secondary">
+                        <span class="icon">🗂️</span> Boards
+                    </button>
+                    <button id="stats-btn" class="btn btn-secondary">
+                        <span class="icon">📊</span> Statistics
+                    </button>
+                    <button id="refresh-btn" class="btn btn-secondary">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Quick Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Total Tasks:</span>
+                <span class="stat-value" id="total-tasks">{{ stats.total_tasks }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">To Do:</span>
+                <span class="stat-value todo-count">{{ stats.by_column['To Do'] }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">In Progress:</span>
+                <span class="stat-value progress-count">{{ stats.by_column['In Progress'] }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Done:</span>
+                <span class="stat-value done-count">{{ stats.by_column['Done'] }}</span>
+            </div>
+            {% if stats.due_stats.overdue > 0 %}
+            <div class="stat-item urgent">
+                <span class="stat-label">⚠️ Overdue:</span>
+                <span class="stat-value">{{ stats.due_stats.overdue }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Main Kanban Board -->
+        <main class="kanban-container">
+            <div class="kanban-board">
+                <!-- To Do Column -->
+                <div class="column" data-column="To Do">
+                    <div class="column-header">
+                        <h2 class="column-title">
+                            <span class="icon">📝</span>
+                            To Do
+                            <span class="task-count">{{ board_data['To Do']|length }}</span>
+                        </h2>
+                    </div>
+                    <div class="column-content" id="todo-column">
+                        {% for task in board_data['To Do'] %}
+                        <div class="task-card" data-task-id="{{ task.id }}" data-column="To Do">
+                            <div class="task-header">
+                                <div class="task-priority priority-{{ task.priority }}">
+                                    {% if task.priority == 'high' %}🔴{% elif task.priority == 'medium' %}🟡{% else %}🟢{% endif %}
+                                </div>
+                                <div class="task-id">{{ task.id[:4] }}</div>
+                                <div class="task-actions">
+                                    <button class="task-action-btn edit-btn" data-task-id="{{ task.id }}">✏️</button>
+                                    <button class="task-action-btn delete-btn" data-task-id="{{ task.id }}">🗑️</button>
+                                </div>
+                            </div>
+                            <div class="task-title">{{ task.title }}</div>
+                            {% if task.description %}
+                            <div class="task-description">{{ task.description[:100] }}{% if task.description|length > 100 %}...{% endif %}</div>
+                            {% endif %}
+                            {% if task.due_date %}
+                            <div class="task-due-date" data-due="{{ task.due_date }}">
+                                📅 {{ task.due_date[:10] }}
+                            </div>
+                            {% endif %}
+                            {% if task.tags %}
+                            <div class="task-tags">
+                                {% for tag in task.tags[:3] %}
+                                <span class="tag">#{{ tag }}</span>
+                                {% endfor %}
+                                {% if task.tags|length > 3 %}
+                                <span class="tag more-tags">+{{ task.tags|length - 3 }}</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- In Progress Column -->
+                <div class="column" data-column="In Progress">
+                    <div class="column-header">
+                        <h2 class="column-title">
+                            <span class="icon">⚡</span>
+                            In Progress
+                            <span class="task-count">{{ board_data['In Progress']|length }}</span>
+                        </h2>
+                    </div>
+                    <div class="column-content" id="progress-column">
+                        {% for task in board_data['In Progress'] %}
+                        <div class="task-card" data-task-id="{{ task.id }}" data-column="In Progress">
+                            <div class="task-header">
+                                <div class="task-priority priority-{{ task.priority }}">
+                                    {% if task.priority == 'high' %}🔴{% elif task.priority == 'medium' %}🟡{% else %}🟢{% endif %}
+                                </div>
+                                <div class="task-id">{{ task.id[:4] }}</div>
+                                <div class="task-actions">
+                                    <button class="task-action-btn edit-btn" data-task-id="{{ task.id }}">✏️</button>
+                                    <button class="task-action-btn delete-btn" data-task-id="{{ task.id }}">🗑️</button>
+                                </div>
+                            </div>
+                            <div class="task-title">{{ task.title }}</div>
+                            {% if task.description %}
+                            <div class="task-description">{{ task.description[:100] }}{% if task.description|length > 100 %}...{% endif %}</div>
+                            {% endif %}
+                            {% if task.due_date %}
+                            <div class="task-due-date" data-due="{{ task.due_date }}">
+                                📅 {{ task.due_date[:10] }}
+                            </div>
+                            {% endif %}
+                            {% if task.tags %}
+                            <div class="task-tags">
+                                {% for tag in task.tags[:3] %}
+                                <span class="tag">#{{ tag }}</span>
+                                {% endfor %}
+                                {% if task.tags|length > 3 %}
+                                <span class="tag more-tags">+{{ task.tags|length - 3 }}</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Done Column -->
+                <div class="column" data-column="Done">
+                    <div class="column-header">
+                        <h2 class="column-title">
+                            <span class="icon">✅</span>
+                            Done
+                            <span class="task-count">{{ board_data['Done']|length }}</span>
+                        </h2>
+                    </div>
+                    <div class="column-content" id="done-column">
+                        {% for task in board_data['Done'] %}
+                        <div class="task-card completed" data-task-id="{{ task.id }}" data-column="Done">
+                            <div class="task-header">
+                                <div class="task-priority priority-{{ task.priority }}">
+                                    {% if task.priority == 'high' %}🔴{% elif task.priority == 'medium' %}🟡{% else %}🟢{% endif %}
+                                </div>
+                                <div class="task-id">{{ task.id[:4] }}</div>
+                                <div class="task-actions">
+                                    <button class="task-action-btn edit-btn" data-task-id="{{ task.id }}">✏️</button>
+                                    <button class="task-action-btn delete-btn" data-task-id="{{ task.id }}">🗑️</button>
+                                </div>
+                            </div>
+                            <div class="task-title">{{ task.title }}</div>
+                            {% if task.description %}
+                            <div class="task-description">{{ task.description[:100] }}{% if task.description|length > 100 %}...{% endif %}</div>
+                            {% endif %}
+                            {% if task.due_date %}
+                            <div class="task-due-date" data-due="{{ task.due_date }}">
+                                📅 {{ task.due_date[:10] }}
+                            </div>
+                            {% endif %}
+                            {% if task.tags %}
+                            <div class="task-tags">
+                                {% for tag in task.tags[:3] %}
+                                <span class="tag">#{{ tag }}</span>
+                                {% endfor %}
+                                {% if task.tags|length > 3 %}
+                                <span class="tag more-tags">+{{ task.tags|length - 3 }}</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Add Task Modal -->
+        <div id="add-task-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>✨ Create New Task</h3>
+                    <button class="close-btn" id="close-add-modal">&times;</button>
+                </div>
+                <form id="add-task-form">
+                    <div class="form-group">
+                        <label for="task-title">Task Title *</label>
+                        <input type="text" id="task-title" name="title" required maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label for="task-description">Description</label>
+                        <textarea id="task-description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="task-priority">Priority</label>
+                            <select id="task-priority" name="priority">
+                                <option value="low">🟢 Low</option>
+                                <option value="medium" selected>🟡 Medium</option>
+                                <option value="high">🔴 High</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="task-due-date">Due Date</label>
+                            <input type="date" id="task-due-date" name="due_date">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-tags">Tags (comma-separated)</label>
+                        <input type="text" id="task-tags" name="tags" placeholder="e.g. urgent, backend, security">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-add-task">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="icon">➕</span> Create Task
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Task Modal -->
+        <div id="edit-task-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>✏️ Edit Task</h3>
+                    <button class="close-btn" id="close-edit-modal">&times;</button>
+                </div>
+                <form id="edit-task-form">
+                    <div class="form-group">
+                        <label for="edit-task-title">Task Title *</label>
+                        <input type="text" id="edit-task-title" name="title" required maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-task-description">Description</label>
+                        <textarea id="edit-task-description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-task-priority">Priority</label>
+                            <select id="edit-task-priority" name="priority">
+                                <option value="low">🟢 Low</option>
+                                <option value="medium">🟡 Medium</option>
+                                <option value="high">🔴 High</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-task-due-date">Due Date</label>
+                            <input type="date" id="edit-task-due-date" name="due_date">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-task-tags">Tags (comma-separated)</label>
+                        <input type="text" id="edit-task-tags" name="tags" placeholder="e.g. urgent, backend, security">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-edit-task">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="icon">💾</span> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Boards Modal -->
+        <div id="boards-modal" class="modal">
+            <div class="modal-content large">
+                <div class="modal-header">
+                    <h3>🗂️ Board Management</h3>
+                    <button class="close-btn" id="close-boards-modal">&times;</button>
+                </div>
+                <div class="boards-content">
+                    <div class="boards-actions">
+                        <button id="create-board-btn" class="btn btn-primary">
+                            <span class="icon">➕</span> Create New Board
+                        </button>
+                    </div>
+                    <div id="boards-list">
+                        <!-- Boards will be loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Status -->
+        <div id="connection-status" class="connection-status">
+            <span id="status-indicator" class="status-indicator connecting">🔄</span>
+            <span id="status-text">Connecting...</span>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Load JavaScript -->
+    <script src="/static/js/kanban.js"></script>
+</body>
+</html>
