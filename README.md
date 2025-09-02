@@ -133,19 +133,62 @@ The Enhanced Kanban Board now includes a modern web interface with real-time col
 3. **Start managing tasks** with the intuitive web interface!
 
 ### Web Interface Screenshots
-```
-📋 Main Board View
-┌─────────────────────────────────────────────────────────────┐
-│  📋 Enhanced Kanban Board                    [Add Task] [⚙️] │
-├─────────────┬─────────────────┬───────────────────────────────┤
-│   To Do     │   In Progress   │           Done                │
-├─────────────┼─────────────────┼───────────────────────────────┤
-│ 🔴 Fix bug  │ 🟡 Review PR    │ 🟢 Deploy v2.1               │
-│ (abc1) ✏️🗑️  │ (def2) ✏️🗑️     │ (ghi3) ✏️🗑️                    │
-│ #urgent     │ #review         │ ✅ Completed                  │
-└─────────────┴─────────────────┴───────────────────────────────┘
 
-✨ Drag tasks between columns • 🔄 Real-time updates • 📱 Mobile ready
+**Main Board View:**
+```
+📋 Enhanced Kanban Board - Main Board                    [➕ Add Task] [🗂️ Boards] [📊 Statistics] [🔄 Refresh]
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Total Tasks: 3 | To Do: 2 | In Progress: 1 | Done: 0
+
+┌─────────────────────────────────────────────┬─────────────────────────────────────────────┬─────────────────────────────────────────────┐
+│ 📝 To Do                                 (2)│ ⚡ In Progress                            (1)│ ✅ Done                                   (0)│
+├─────────────────────────────────────────────┼─────────────────────────────────────────────┼─────────────────────────────────────────────┤
+│ ┌─────────────────────────────────────────┐ │ ┌─────────────────────────────────────────┐ │                                             │
+│ │ 🟡 e134 Test 1                      ✏️🗑️│ │ │ 🟡 1e06 Work on KB Project          ✏️🗑️│ │                                             │
+│ │ Test description                       │ │ │                                         │ │                                             │
+│ │ 📅 Due 2025-09-18                      │ │ │                                         │ │                                             │
+│ │ #test                                  │ │ │                                         │ │                                             │
+│ └─────────────────────────────────────────┘ │ └─────────────────────────────────────────┘ │                                             │
+│ ┌─────────────────────────────────────────┐ │                                             │                                             │
+│ │ 🟡 6078 test                         ✏️🗑️│ │                                             │                                             │
+│ └─────────────────────────────────────────┘ │                                             │                                             │
+└─────────────────────────────────────────────┴─────────────────────────────────────────────┴─────────────────────────────────────────────┘
+
+✨ Features: Drag & drop tasks • Real-time WebSocket updates • Mobile responsive • Full task editing • Multiple boards
+```
+
+### Terminal Interface Screenshots
+
+**Main Menu:**
+```
+╭── ENHANCED KANBAN MENU ───╮
+│ 1. View Board         (v) │
+│ 2. Add Task          (a)  │
+│ 3. Edit Task         (e)  │
+│ 4. Move Task         (m)  │
+│ 5. Delete Task       (d)  │
+│ 6. Search & Filter   (s)  │
+│ 7. View Statistics    (r) │
+│ 8. Export Reports     (x) │
+│ 9. Board Management  (b)  │
+│ 10. Exit             (q)  │
+╰─ Active Board: Main Board─╯
+Enter choice (1-10): 
+```
+
+**Terminal Board View:**
+```
+──────────────────────────────────────────────────────── 📋 KANBAN BOARD ────────────────────────────────────────────────────────────
+╔═══════════════════════════╤══════════════════════════════╤═══════════════════════════╗
+║ To Do                     │ In Progress                  │ Done                      ║
+╟───────────────────────────┼──────────────────────────────┼───────────────────────────╢
+║ 🟡 test (e134)            │ 🟡 Work on KB Project (1e06) │                           ║
+║ 🟡 Test 1 (6078)          │                              │                           ║
+║ 📅 Due 09/18              │                              │                           ║
+║ #test                     │                              │                           ║
+║ Test description          │                              │                           ║
+╚═══════════════════════════╧══════════════════════════════╧═══════════════════════════╝
+Total tasks: 3
 ```
 
 ### Network Access
@@ -496,8 +539,17 @@ copy kanban_data.json.bak_corrupt_TIMESTAMP kanban_data.json
 ## 🎯 Technical Details
 
 ### Dependencies
+
+#### Terminal Interface
 - **Rich**: Terminal UI framework for beautiful displays and UI components
 - **Standard Library**: json, os, uuid, tempfile, shutil, datetime, typing
+
+#### Web Interface
+- **FastAPI**: Modern, high-performance web framework for building APIs
+- **Uvicorn**: Lightning-fast ASGI server implementation
+- **Jinja2**: Modern templating engine for Python
+- **python-multipart**: Library for parsing multipart form data
+- **websockets**: Library for building WebSocket servers and clients
 
 ### Enhanced Data Format
 
