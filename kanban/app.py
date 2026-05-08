@@ -56,10 +56,10 @@ class TaskItem(ListItem):
     def __init__(self, task: Task) -> None:
         super().__init__()
         self.task_id = task.id
-        self._task = task
+        self._kanban_task = task
 
     def compose(self) -> ComposeResult:
-        yield TaskCard(self._task)
+        yield TaskCard(self._kanban_task)
 
 
 class ColumnHeader(Static):
@@ -134,19 +134,19 @@ class EditTaskScreen(ModalScreen[Task | None]):
 
     def __init__(self, task: Task) -> None:
         super().__init__()
-        self._task = task
+        self._kanban_task = task
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal-container"):
             yield Label("Edit Task", classes="modal-title")
             yield Label("Title")
-            yield Input(value=self._task.title, id="title-input")
+            yield Input(value=self._kanban_task.title, id="title-input")
             yield Label("Description")
-            yield Input(value=self._task.description, id="desc-input")
+            yield Input(value=self._kanban_task.description, id="desc-input")
             yield Label("Priority")
             yield Select(
                 [(p.value.capitalize(), p.value) for p in Priority],
-                value=self._task.priority.value,
+                value=self._kanban_task.priority.value,
                 id="priority-select",
             )
             with Horizontal(classes="button-row"):
@@ -162,12 +162,12 @@ class EditTaskScreen(ModalScreen[Task | None]):
         if not title:
             self.notify("Title is required", severity="error")
             return
-        self._task.title = title
-        self._task.description = self.query_one("#desc-input", Input).value.strip()
-        self._task.priority = Priority(
+        self._kanban_task.title = title
+        self._kanban_task.description = self.query_one("#desc-input", Input).value.strip()
+        self._kanban_task.priority = Priority(
             self.query_one("#priority-select", Select).value
         )
-        self.dismiss(self._task)
+        self.dismiss(self._kanban_task)
 
     @on(Button.Pressed, "#btn-cancel")
     def _cancel_btn(self) -> None:
@@ -329,8 +329,11 @@ class KanbanApp(App):
             slug = col.value.lower().replace(" ", "-")
             lv = self.query_one(f"#list-{slug}", ListView)
             lv.clear()
-            for task in self.board.tasks_in_column(col):
+            tasks = self.board.tasks_in_column(col)
+            for task in tasks:
                 lv.append(TaskItem(task))
+            if tasks:
+                lv.index = 0
         self._update_headers()
 
     def _update_headers(self) -> None:
@@ -404,33 +407,30 @@ class KanbanApp(App):
 
         self.push_screen(ConfirmDeleteScreen(task.title), callback=on_result)
 
-    def action_move_left(self) -> None:
+    def _move_task(self, direction: int) -> None:
+        """Move the selected task left (-1) or right (+1)."""
         task = self._get_selected_task()
         if not task:
             self.notify("No task selected", severity="warning")
             return
         idx = COLUMN_ORDER.index(task.column)
-        if idx == 0:
-            self.notify("Already in first column", severity="warning")
+        new_idx = idx + direction
+        if new_idx < 0 or new_idx >= len(COLUMN_ORDER):
+            edge = "first" if direction < 0 else "last"
+            self.notify(f"Already in {edge} column", severity="warning")
             return
-        task.column = COLUMN_ORDER[idx - 1]
+        task.column = COLUMN_ORDER[new_idx]
         save_board(self.board)
         self._refresh_board()
+        slug = task.column.value.lower().replace(" ", "-")
+        self.query_one(f"#list-{slug}", ListView).focus()
         self.notify(f"Moved '{task.title}' to {task.column.value}")
 
+    def action_move_left(self) -> None:
+        self._move_task(-1)
+
     def action_move_right(self) -> None:
-        task = self._get_selected_task()
-        if not task:
-            self.notify("No task selected", severity="warning")
-            return
-        idx = COLUMN_ORDER.index(task.column)
-        if idx == len(COLUMN_ORDER) - 1:
-            self.notify("Already in last column", severity="warning")
-            return
-        task.column = COLUMN_ORDER[idx + 1]
-        save_board(self.board)
-        self._refresh_board()
-        self.notify(f"Moved '{task.title}' to {task.column.value}")
+        self._move_task(1)
 
     def action_focus_next_column(self) -> None:
         lists = list(self.query(ListView))
