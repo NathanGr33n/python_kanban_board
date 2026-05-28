@@ -218,6 +218,20 @@ class KanbanApp(App):
     Screen {
         background: $surface-darken-1;
     }
+    Header {
+        background: #5b21b6;
+        color: #f5f3ff;
+    }
+
+    Footer {
+        background: #4c1d95;
+        color: #ede9fe;
+    }
+
+    Footer > .footer--key {
+        background: #7c3aed;
+        color: #f5f3ff;
+    }
 
     #board {
         height: 1fr;
@@ -225,15 +239,15 @@ class KanbanApp(App):
 
     KanbanColumn {
         width: 1fr;
-        border: solid $accent;
+        border: solid #7c3aed;
         margin: 0 1;
     }
 
     .column-header {
         text-align: center;
         text-style: bold;
-        background: $accent;
-        color: $text;
+        background: #7c3aed;
+        color: #f5f3ff;
         padding: 1 0;
     }
 
@@ -255,7 +269,7 @@ class KanbanApp(App):
     .modal-container {
         width: 60;
         max-height: 80%;
-        border: thick $accent;
+        border: thick #7c3aed;
         background: $surface;
         padding: 1 2;
     }
@@ -278,6 +292,15 @@ class KanbanApp(App):
 
     .button-row Button {
         margin: 0 1;
+    }
+
+    .button-row Button.-primary {
+        background: #7c3aed;
+        color: #f5f3ff;
+    }
+
+    .button-row Button.-primary:hover {
+        background: #8b5cf6;
     }
 
     AddTaskScreen, EditTaskScreen, ConfirmDeleteScreen {
